@@ -178,7 +178,6 @@ class ModelManager:
         try:
             import numpy as np
             
-            # Convert patient input to feature array (exact order from Phase 1)
             features = np.array([[
                 patient.age,
                 patient.gender,
@@ -193,14 +192,11 @@ class ModelManager:
                 patient.active
             ]])
             
-            # Predict probability for disease class (class 1)
             proba = self.model.predict_proba(features)[0]
-            risk_prob = float(proba[1])  # Probability of disease
+            risk_prob = float(proba[1])
             
-            # Calculate BMI
             bmi = patient.weight / ((patient.height / 100) ** 2)
             
-            # Categorize risk
             if risk_prob < 0.3:
                 category = "Low"
             elif risk_prob < 0.5:
@@ -224,92 +220,161 @@ class ModelManager:
 
 
 class SHAPExplainer:
-    """Wraps SHAP explainability from Phase 3"""
-    
+    """Wraps SHAP explainability safely handling raw binary trees"""
+
     def __init__(self, model_manager: ModelManager):
         self.model_manager = model_manager
         self.explainer = None
         self.load_explainer()
-    
+
     def load_explainer(self):
-        """Initialize SHAP explainer for tree-based models"""
+        """Initialize SHAP explainer without triggering binary decoding errors"""
         try:
             import shap
-            
-            if self.model_manager.model is None:
+
+            if not self.model_manager or self.model_manager.model is None:
                 logger.warning("Cannot initialize SHAP - model not loaded")
                 return
-            
-            # Extract the model from the pipeline
-            model_obj = self.model_manager.model.named_steps.get('model')
-            if model_obj is None:
-                model_obj = self.model_manager.model
-            
-            self.explainer = shap.TreeExplainer(model_obj)
-            logger.info("✓ SHAP TreeExplainer initialized")
-        
+
+            pipeline = self.model_manager.model
+
+            # Extract underlying estimator step if inside a Pipeline
+            if hasattr(pipeline, "named_steps"):
+                model_obj = pipeline.named_steps.get("model", pipeline.steps[-1][1])
+            else:
+                model_obj = pipeline
+
+            # Primary attempt: Use raw booster for XGBoost to avoid C-extension binary string decoding
+            if hasattr(model_obj, "get_booster"):
+                booster = model_obj.get_booster()
+                self.explainer = shap.TreeExplainer(booster)
+            else:
+                self.explainer = shap.TreeExplainer(model_obj)
+
+            logger.info("✓ SHAP TreeExplainer initialized successfully")
+
         except Exception as e:
-            logger.error(f"SHAP initialization error: {e}")
-            self.explainer = None
-    
-    def explain(self, patient: PatientInput, 
-                test_sample: Optional[Any] = None) -> Dict[str, Any]:
+            try:
+                import shap
+
+                pipeline = self.model_manager.model
+                model_obj = (
+                    pipeline.named_steps.get("model", pipeline.steps[-1][1])
+                    if hasattr(pipeline, "named_steps")
+                    else pipeline
+                )
+
+                # Robust fallback using model's prediction function directly
+                self.explainer = shap.Explainer(
+                    model_obj.predict,
+                    feature_names=[
+                        "age",
+                        "gender",
+                        "height",
+                        "weight",
+                        "ap_hi",
+                        "ap_lo",
+                        "cholesterol",
+                        "gluc",
+                        "smoke",
+                        "alco",
+                        "active",
+                    ],
+                )
+                logger.info("✓ SHAP Explainer initialized via prediction fallback")
+            except Exception as fallback_error:
+                logger.error(f"SHAP initialization error: {fallback_error}")
+                self.explainer = None
+
+    def explain(
+        self, patient: PatientInput, test_sample: Optional[Any] = None
+    ) -> Dict[str, Any]:
         """Generate SHAP explanation for patient prediction"""
         if self.explainer is None:
             raise RuntimeError("SHAP explainer not initialized")
-        
+
         try:
             import numpy as np
-            
-            # Create feature array
-            features = np.array([[
-                patient.age, patient.gender, patient.height, patient.weight,
-                patient.ap_hi, patient.ap_lo, patient.cholesterol, patient.gluc,
-                patient.smoke, patient.alco, patient.active
-            ]])
-            
-            # Get SHAP values
-            shap_values = self.explainer.shap_values(features)
-            
-            if isinstance(shap_values, list):
-                sv = shap_values[1][0]
+
+            features = np.array(
+                [
+                    [
+                        patient.age,
+                        patient.gender,
+                        patient.height,
+                        patient.weight,
+                        patient.ap_hi,
+                        patient.ap_lo,
+                        patient.cholesterol,
+                        patient.gluc,
+                        patient.smoke,
+                        patient.alco,
+                        patient.active,
+                    ]
+                ]
+            )
+
+            # Generate SHAP values (handles Explanation objects and raw arrays)
+            shap_output = self.explainer(features)
+
+            if hasattr(shap_output, "values"):
+                sv = shap_output.values[0]
+                if sv.ndim > 1:
+                    sv = sv[:, 1] if sv.shape[1] > 1 else sv[:, 0]
+            elif isinstance(shap_output, list):
+                sv = shap_output[1][0]
             else:
-                sv = shap_values[0]
-            
-            # Feature names
-            feature_names = ["age", "gender", "height", "weight", "ap_hi", "ap_lo",
-                             "cholesterol", "gluc", "smoke", "alco", "active"]
+                sv = shap_output[0]
+
+            feature_names = [
+                "age",
+                "gender",
+                "height",
+                "weight",
+                "ap_hi",
+                "ap_lo",
+                "cholesterol",
+                "gluc",
+                "smoke",
+                "alco",
+                "active",
+            ]
             feature_values = features[0].tolist()
-            
-            # Create feature explanations
+
             explanations = []
             for idx, (name, shap_val, feat_val) in enumerate(
                 zip(feature_names, sv, feature_values)
             ):
-                explanations.append({
-                    "feature": name,
-                    "value": float(feat_val),
-                    "shap_value": float(shap_val),
-                    "impact": "positive" if shap_val > 0 else "negative",
-                    "feature_rank": idx
-                })
-            
-            # Sort by absolute SHAP value
-            explanations.sort(
-                key=lambda x: abs(x["shap_value"]), reverse=True
-            )
-            
-            # Re-rank
+                explanations.append(
+                    {
+                        "feature": name,
+                        "value": float(feat_val),
+                        "shap_value": float(shap_val),
+                        "impact": "positive" if shap_val > 0 else "negative",
+                        "feature_rank": idx,
+                    }
+                )
+
+            explanations.sort(key=lambda x: abs(x["shap_value"]), reverse=True)
+
             for idx, exp in enumerate(explanations):
                 exp["feature_rank"] = idx + 1
-            
-            return {
-                "features": explanations,
-                "base_value": float(self.explainer.expected_value[1]) 
-                              if isinstance(self.explainer.expected_value, list)
-                              else float(self.explainer.expected_value)
-            }
-        
+
+            # Determine expected base value across different SHAP versions
+            if hasattr(self.explainer, "expected_value"):
+                expected_val = self.explainer.expected_value
+                if isinstance(expected_val, (list, np.ndarray)):
+                    base_val = float(expected_val[1] if len(expected_val) > 1 else expected_val[0])
+                else:
+                    base_val = float(expected_val)
+            elif hasattr(shap_output, "base_values"):
+                bv = shap_output.base_values[0]
+                base_val = float(bv[1] if bv.ndim > 0 and bv.shape[0] > 1 else bv)
+            else:
+                base_val = 0.5
+
+            return {"features": explanations, "base_value": base_val}
+
         except Exception as e:
             logger.error(f"SHAP explanation error: {e}")
             raise
@@ -327,9 +392,6 @@ class CounterfactualSimulator:
             raise RuntimeError("Model not loaded")
         
         try:
-            import numpy as np
-            
-            # Get predictions for both
             original_result = self.model_manager.predict(original)
             modified_result = self.model_manager.predict(modified)
             
@@ -338,7 +400,6 @@ class CounterfactualSimulator:
             delta = modified_risk - original_risk
             delta_pct = (delta / original_risk * 100) if original_risk > 0 else 0
             
-            # Determine which factors changed
             changed_features = []
             feature_names = ["age", "gender", "height", "weight", "ap_hi", "ap_lo",
                              "cholesterol", "gluc", "smoke", "alco", "active"]
@@ -594,4 +655,4 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000, reload=False)
+    uvicorn.run("backend.main:app", host="127.0.0.1", port=8000, reload=True)
