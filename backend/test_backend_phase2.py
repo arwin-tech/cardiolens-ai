@@ -2,14 +2,16 @@ import pytest
 from fastapi.testclient import TestClient
 from backend.main import app
 
+
 @pytest.fixture
 def client():
     """Create a FastAPI TestClient instance"""
     return TestClient(app)
 
+
 class TestCardioLensAPI:
     """Test suite for CardioLens AI API endpoints"""
-    
+
     VALID_PATIENT = {
         "age": 52,
         "gender": 1,
@@ -21,9 +23,9 @@ class TestCardioLensAPI:
         "gluc": 1,
         "smoke": 0,
         "alco": 0,
-        "active": 1
+        "active": 1,
     }
-    
+
     VALID_PATIENT_2 = {
         "age": 45,
         "gender": 2,
@@ -35,9 +37,9 @@ class TestCardioLensAPI:
         "gluc": 1,
         "smoke": 1,
         "alco": 1,
-        "active": 0
+        "active": 0,
     }
-    
+
     def test_health_endpoint(self, client):
         """Test GET /api/health returns 200"""
         response = client.get("/api/health")
@@ -69,7 +71,7 @@ class TestCardioLensAPI:
         invalid_patient = {
             **self.VALID_PATIENT,
             "ap_hi": 100,
-            "ap_lo": 150
+            "ap_lo": 150,
         }
         response = client.post("/api/predict", json=invalid_patient)
         assert response.status_code == 422
