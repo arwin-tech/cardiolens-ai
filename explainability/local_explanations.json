@@ -1,0 +1,162 @@
+[
+  {
+    "patient_id": "patient_2900",
+    "predicted_risk": 0.24594824016094208,
+    "top_factors": [
+      {
+        "feature": "ap_hi",
+        "value": 120.0,
+        "shap_value": -0.6996633410453796
+      },
+      {
+        "feature": "age",
+        "value": 46.0,
+        "shap_value": -0.33652955293655396
+      },
+      {
+        "feature": "weight",
+        "value": 95.0,
+        "shap_value": 0.2125367373228073
+      },
+      {
+        "feature": "cholesterol",
+        "value": 1.0,
+        "shap_value": -0.17678874731063843
+      },
+      {
+        "feature": "active",
+        "value": 1.0,
+        "shap_value": -0.09062124788761139
+      }
+    ],
+    "disclaimer": "This explanation describes model behavior only, not medical causality."
+  },
+  {
+    "patient_id": "patient_3143",
+    "predicted_risk": 0.14532296359539032,
+    "top_factors": [
+      {
+        "feature": "ap_hi",
+        "value": 110.0,
+        "shap_value": -1.0423519611358643
+      },
+      {
+        "feature": "weight",
+        "value": 58.0,
+        "shap_value": -0.24421897530555725
+      },
+      {
+        "feature": "age",
+        "value": 47.0,
+        "shap_value": -0.19306272268295288
+      },
+      {
+        "feature": "cholesterol",
+        "value": 1.0,
+        "shap_value": -0.1661849468946457
+      },
+      {
+        "feature": "ap_lo",
+        "value": 70.0,
+        "shap_value": -0.13144926726818085
+      }
+    ],
+    "disclaimer": "This explanation describes model behavior only, not medical causality."
+  },
+  {
+    "patient_id": "patient_8231",
+    "predicted_risk": 0.35883089900016785,
+    "top_factors": [
+      {
+        "feature": "ap_hi",
+        "value": 120.0,
+        "shap_value": -0.5930187702178955
+      },
+      {
+        "feature": "age",
+        "value": 58.0,
+        "shap_value": 0.27543339133262634
+      },
+      {
+        "feature": "cholesterol",
+        "value": 1.0,
+        "shap_value": -0.13576628267765045
+      },
+      {
+        "feature": "active",
+        "value": 1.0,
+        "shap_value": -0.06522120535373688
+      },
+      {
+        "feature": "weight",
+        "value": 67.0,
+        "shap_value": -0.06333614140748978
+      }
+    ],
+    "disclaimer": "This explanation describes model behavior only, not medical causality."
+  },
+  {
+    "patient_id": "patient_3855",
+    "predicted_risk": 0.2450074404478073,
+    "top_factors": [
+      {
+        "feature": "ap_hi",
+        "value": 110.0,
+        "shap_value": -0.8636475205421448
+      },
+      {
+        "feature": "age",
+        "value": 41.0,
+        "shap_value": -0.8024342060089111
+      },
+      {
+        "feature": "weight",
+        "value": 105.0,
+        "shap_value": 0.6084954142570496
+      },
+      {
+        "feature": "cholesterol",
+        "value": 1.0,
+        "shap_value": -0.15730860829353333
+      },
+      {
+        "feature": "gender",
+        "value": 2.0,
+        "shap_value": 0.049624282866716385
+      }
+    ],
+    "disclaimer": "This explanation describes model behavior only, not medical causality."
+  },
+  {
+    "patient_id": "patient_8045",
+    "predicted_risk": 0.5006353855133057,
+    "top_factors": [
+      {
+        "feature": "ap_lo",
+        "value": 90.0,
+        "shap_value": 0.25876137614250183
+      },
+      {
+        "feature": "cholesterol",
+        "value": 1.0,
+        "shap_value": -0.2343173772096634
+      },
+      {
+        "feature": "ap_hi",
+        "value": 130.0,
+        "shap_value": 0.2282889038324356
+      },
+      {
+        "feature": "smoke",
+        "value": 1.0,
+        "shap_value": -0.22230419516563416
+      },
+      {
+        "feature": "weight",
+        "value": 80.0,
+        "shap_value": 0.1082184687256813
+      }
+    ],
+    "disclaimer": "This explanation describes model behavior only, not medical causality."
+  }
+]

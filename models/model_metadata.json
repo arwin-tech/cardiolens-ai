@@ -1,0 +1,41 @@
+{
+  "model_type": "XGBoost",
+  "model_class": "<class 'xgboost.sklearn.XGBClassifier'>",
+  "test_metrics": {
+    "accuracy": 0.7323571428571428,
+    "precision": 0.7508105604446503,
+    "recall": 0.6951114922813036,
+    "f1": 0.7218882208862168,
+    "roc_auc": 0.7977606890647148
+  },
+  "confusion_matrix": [
+    [
+      5390,
+      1614
+    ],
+    [
+      2133,
+      4863
+    ]
+  ],
+  "feature_names": [
+    "age",
+    "gender",
+    "height",
+    "weight",
+    "ap_hi",
+    "ap_lo",
+    "cholesterol",
+    "gluc",
+    "smoke",
+    "alco",
+    "active"
+  ],
+  "n_features": 11,
+  "n_train_samples": 56000,
+  "n_test_samples": 14000,
+  "training_date": "2026-08-23T02:09:29.394809",
+  "dataset": "Kaggle Cardiovascular Disease",
+  "random_state": 42,
+  "note": "This model was selected based on highest test ROC-AUC score"
+}

@@ -1,0 +1,19 @@
+{
+  "model_type": "XGBClassifier",
+  "sample_size": 1000,
+  "n_features": 11,
+  "feature_names": [
+    "age",
+    "gender",
+    "height",
+    "weight",
+    "ap_hi",
+    "ap_lo",
+    "cholesterol",
+    "gluc",
+    "smoke",
+    "alco",
+    "active"
+  ],
+  "disclaimer": "SHAP explanations reflect statistical association within the trained model and do not constitute clinical guidance."
+}
