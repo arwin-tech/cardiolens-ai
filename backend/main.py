@@ -4,6 +4,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import joblib
 
 import pandas as pd
 from fastapi import FastAPI, File, HTTPException, UploadFile, status
@@ -29,6 +30,28 @@ app = FastAPI(
     description="Explainable cardiovascular disease risk assessment backend",
     version="2.0.0"
 )
+
+# --- ADD / UPDATE ModelManager CLASS HERE ---
+class ModelManager:
+    def __init__(self, model_path: str = None):
+        # Use passed model_path string, default to fallback if none supplied
+        self.model_path = model_path or str(MODEL_PATH)
+        self.model = None
+        self.load_model()
+
+    def load_model(self):
+        if not os.path.exists(self.model_path):
+            logger.warning(f"✗ Model file not found at {self.model_path}")
+            return
+        
+        try:
+            self.model = joblib.load(self.model_path)
+            logger.info(f"✓ Model loaded successfully from {self.model_path}")
+        except Exception as e:
+            logger.error(f"✗ Error loading model from {self.model_path}: {e}")
+
+# Instantiate ModelManager with the resolved MODEL_PATH
+model_manager = ModelManager(model_path=str(MODEL_PATH))
 
 # Configure CORS for local development
 origins = os.getenv(
