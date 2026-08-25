@@ -7,3 +7,4 @@ pandas>=2.0.0
 shap>=0.42.0
 python-dotenv>=1.0.0
 python-multipart>=0.0.6
+xgboost>=2.0.0
