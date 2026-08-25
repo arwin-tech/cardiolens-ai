@@ -1,23 +1,8 @@
-# FastAPI Backend - CardioLens AI Phase 2
-# Core API Framework
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-pydantic==2.4.2
-
-# Data Science & ML
-numpy==1.24.3
-pandas==2.0.3
-scikit-learn==1.3.0
-xgboost==2.0.0
-shap==0.42.1
-
-# Utilities
-python-dotenv==1.0.0
-joblib==1.3.1
-
-# Testing (optional, for Phase 2 validation)
-pytest==7.4.3
-httpx==0.25.1
-
-# CORS and security
-python-multipart==0.0.6
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.4.0
+numpy>=1.24.0
+scikit-learn>=1.3.0
+pandas>=2.0.0
+shap>=0.42.0
+python-dotenv>=1.0.0
