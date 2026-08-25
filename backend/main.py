@@ -708,6 +708,24 @@ async def health_check():
         version="2.0.0"
     )
 
+@app.get("/health", response_model=HealthResponse)
+async def render_health_check():
+    """Root health check endpoint for deployment services like Render"""
+    return HealthResponse(
+        status=(
+            "healthy"
+            if model_manager and model_manager.is_loaded
+            else "degraded"
+        ),
+        service="CardioLens AI API",
+        model_loaded=(
+            model_manager.is_loaded
+            if model_manager
+            else False
+        ),
+        version="2.0.0"
+    )
+
 
 @app.post("/api/predict", response_model=PredictionResponse)
 async def predict(patient: PatientInput):
