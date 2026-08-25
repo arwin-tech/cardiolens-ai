@@ -51,7 +51,7 @@ class ModelManager:
             logger.error(f"✗ Error loading model from {self.model_path}: {e}")
 
 # Instantiate ModelManager with the resolved MODEL_PATH
-model_manager = ModelManager(model_path=str(MODEL_PATH))
+model_manager = ModelManager(str(MODEL_PATH))
 
 # Configure CORS for local development
 origins = os.getenv(
