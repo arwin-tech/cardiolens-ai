@@ -1,4 +1,28 @@
-venv/ 
-__pycache__/ 
-*.pyc 
-.env 
+# Environment files (Prevents committing API keys or local configurations)
+.env
+*.env
+backend/.env
+frontend/.env
+
+# Python Virtual Environments & Cache
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Node / React dependencies & build outputs
+node_modules/
+frontend/node_modules/
+dist/
+build/
+.output/
+
+# IDE & OS System files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
