@@ -1,18 +1,27 @@
-from fastapi import FastAPI, HTTPException, status
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, field_validator
-from typing import Optional, Dict, Any, List
+import io
 import json
+import logging
 import os
 from pathlib import Path
-import logging
-import io
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
-from fastapi import File, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile, status
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field, field_validator
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Base path resolution for model loading
+BASE_DIR = Path(__file__).resolve().parent
+
+MODEL_PATH = BASE_DIR / "models" / "model_pipeline.pkl"
+if not MODEL_PATH.exists():
+    MODEL_PATH = BASE_DIR.parent / "models" / "model_pipeline.pkl"
+
+logger.info(f"Target model path: {MODEL_PATH} (Exists: {MODEL_PATH.exists()})")
 
 # Initialize FastAPI app
 app = FastAPI(
