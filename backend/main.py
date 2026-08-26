@@ -330,15 +330,15 @@ async def root():
         }
     }
 
-@app.get("/api/health", response_model=HealthResponse)
-@app.get("/health", response_model=HealthResponse)
+@app.get("/health")
+@app.get("/api/health")
 async def health_check():
-    return HealthResponse(
-        status="healthy" if model_manager.is_loaded else "degraded",
-        service="CardioLens AI API",
-        model_loaded=model_manager.is_loaded,
-        version="2.0.0"
-    )
+    return {
+        "status": "healthy",
+        "service": "CardioLens AI API",
+        "model_loaded": app.state.model_manager is not None,
+        "version": "2.0.0"
+    }
 
 @app.post("/api/predict", response_model=PredictionResponse)
 async def predict(patient: PatientInput):
