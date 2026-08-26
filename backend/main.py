@@ -722,12 +722,21 @@ except Exception as e:
 # API ENDPOINTS
 # ============================================================================
 
-model_manager = ModelManager(str(MODEL_PATH))
+BASE_DIR = Path(__file__).resolve().parent.parent
+MODEL_PATH = BASE_DIR / "models" / "model_pipeline.pkl"
+METADATA_PATH = BASE_DIR / "models" / "model_metadata.json"
+
+# Initialize global instance (if ModelManager auto-loads in __init__, don't call .load_model())
+model_manager = ModelManager(model_path=str(MODEL_PATH))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Ensure model is explicitly loaded on startup
-    model_manager.load_model()
+    # If ModelManager has a load method, call it safely:
+    if hasattr(model_manager, "load_model"):
+        model_manager.load_model()
+    elif hasattr(model_manager, "load"):
+        model_manager.load()
+    
     app.state.model_manager = model_manager
     yield
 
@@ -735,8 +744,10 @@ app = FastAPI(title="CardioLens AI API", lifespan=lifespan)
 
 @app.get("/api/health")
 def health_check():
-    # Check instance state directly
-    is_loaded = (model_manager.model is not None) or (getattr(app.state, "model_manager", None) and app.state.model_manager.model is not None)
+    # Check model loading status from global instance or app.state
+    mgr = getattr(app, "state", None) and getattr(app.state, "model_manager", model_manager)
+    is_loaded = mgr is not None and getattr(mgr, "model", None) is not None
+    
     return {
         "status": "healthy" if is_loaded else "degraded",
         "service": "CardioLens AI API",
