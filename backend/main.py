@@ -15,11 +15,18 @@ from pydantic import BaseModel, Field, field_validator
 
 app = FastAPI(title="CardioLens AI API")
 
-# Place CORSMiddleware IMMEDIATELY after initializing app
+# Explicit origins list including your Vercel app domain
+origins = [
+    "https://cardiolens-q43gsp6ld-arwin-s-projects.vercel.app",
+    "https://cardiolens-ai.vercel.app",  # Add your production Vercel domain if applicable
+    "http://localhost:5173",             # Vite local development
+    "http://localhost:3000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,  # Set to False when allow_origins=["*"] to follow spec strictly
+    allow_origins=origins,              # Or allow_origins=["*"]
+    allow_credentials=True,             # Set True when specific origins are listed
     allow_methods=["GET", "POST", "OPTIONS", "HEAD"],
     allow_headers=["*"],
     expose_headers=["*"],
