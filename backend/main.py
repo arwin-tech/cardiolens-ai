@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 
 app = FastAPI(title="CardioLens AI API")
 
-# 1. Global CORS Middleware Setup
+# 1. Standard CORS Configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -25,13 +25,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 2. Hard Catch-All for Preflight OPTIONS Requests
+# 2. Universal Middleware to intercept OPTIONS requests before routing
 @app.middleware("http")
-async def cors_preflight_override(request: Request, call_next):
+async def force_cors_preflight(request: Request, call_next):
     if request.method == "OPTIONS":
-        response = JSONResponse(content={"status": "ok"})
+        response = Response(status_code=200)
         response.headers["Access-Control-Allow-Origin"] = "*"
-        response.headers["Access-Control-Allow-Methods"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "*"
         return response
     
