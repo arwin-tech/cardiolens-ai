@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { HeartPulse, ShieldCheck, Cpu, LineChart } from 'lucide-react';
+import { ShieldCheck, Cpu, LineChart } from 'lucide-react';
 
 export default function Home() {
   return (

@@ -1,4 +1,4 @@
-import { PatientInput, PredictionResponse, ExplainabilityResponse, WhatIfResponse, HealthResponse } from '../types/api';
+import { PatientInput, PredictionResponse, ExplainabilityResponse, HealthResponse } from '../types/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
@@ -28,21 +28,21 @@ export async function explainPrediction(patient: PatientInput): Promise<Explaina
   return res.json();
 }
 
-export async function runWhatIf(original: any, modified: any) {
-  const response = await fetch('http://127.0.0.1:8000/api/what-if', {
+export async function runWhatIf(original: PatientInput, modified: PatientInput) {
+  const response = await fetch(`${API_URL}/api/what-if`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       original: original,
-      modified: modified
+      modified: modified,
     }),
   });
 
   if (!response.ok) {
     const errorDetail = await response.json();
-    console.error("FastAPI Validation Detail:", errorDetail);
+    console.error('FastAPI Validation Detail:', errorDetail);
     throw new Error('What-If API call failed');
   }
 

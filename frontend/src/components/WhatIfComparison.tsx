@@ -1,6 +1,16 @@
-import React from 'react';
+interface WhatIfData {
+  original_risk?: number;
+  original_risk_percentage?: number;
+  simulated_risk?: number;
+  simulated_risk_percentage?: number;
+  risk_delta?: number;
+  original_ap_hi?: number | string;
+  original_features?: { ap_hi?: number | string };
+  target_ap_hi?: number | string;
+  modified_features?: { ap_hi?: number | string };
+}
 
-export default function WhatIfComparison({ data }: { data: any }) {
+export default function WhatIfComparison({ data }: { data: WhatIfData | null }) {
   if (!data) return null;
 
   const origRisk = data.original_risk ?? data.original_risk_percentage ?? 0;

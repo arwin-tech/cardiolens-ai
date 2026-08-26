@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Download, FileText, Upload, CheckCircle } from 'lucide-react';
 import RiskGauge from '../components/RiskGauge';
@@ -159,24 +159,23 @@ export default function Results() {
   if (!prediction || !explanation) return null;
 
   const handleSimulate = async () => {
-  if (!prediction) return;
+    if (!prediction) return;
 
-  const currentFeatures = prediction.patient_features;
+    const currentFeatures = prediction.patient_features;
 
-  const modifiedFeatures = {
-    ...currentFeatures,
-    ap_hi: simulatedSysBP,
-    ap_lo: Math.min(currentFeatures.ap_lo, 80),
+    const modifiedFeatures = {
+      ...currentFeatures,
+      ap_hi: simulatedSysBP,
+      ap_lo: Math.min(currentFeatures.ap_lo, 80),
+    };
+
+    try {
+      const res = await runWhatIf(currentFeatures, modifiedFeatures);
+      setWhatIfData(res);
+    } catch (e) {
+      console.error("Simulation failed:", e);
+    }
   };
-
-  try {
-    const res = await runWhatIf(currentFeatures, modifiedFeatures);
-    setWhatIfData(res);
-  } catch (e) {
-    console.error("Simulation failed:", e);
-  }
-};
-  
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-10 space-y-8">
