@@ -15,15 +15,15 @@ from pydantic import BaseModel, Field, field_validator
 
 app = FastAPI(title="CardioLens AI API")
 
-# Configure CORS Middleware
+# Place CORSMiddleware IMMEDIATELY after initializing app
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins including Vercel deployment preview/production URLs
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows GET, POST, OPTIONS, etc.
-    allow_headers=["*"],  # Allows headers like Content-Type
+    allow_origins=["*"],
+    allow_credentials=False,  # Set to False when allow_origins=["*"] to follow spec strictly
+    allow_methods=["GET", "POST", "OPTIONS", "HEAD"],
+    allow_headers=["*"],
+    expose_headers=["*"],
 )
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
