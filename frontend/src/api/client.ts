@@ -1,16 +1,15 @@
 import { PatientInput, PredictionResponse, ExplainabilityResponse, HealthResponse } from '../types/api';
 
-// Normalize BASE_URL by stripping any trailing slashes, defaulting to live Render backend
 const BASE_URL = (import.meta.env.VITE_API_URL || 'https://cardiolens-ai-za8w.onrender.com').replace(/\/+$/, '');
 
 export async function checkHealth(): Promise<HealthResponse> {
-  const res = await fetch(`${BASE_URL}/api/health`);
+  const res = await fetch(`${BASE_URL}/health`);
   if (!res.ok) throw new Error('Health check failed');
   return res.json();
 }
 
 export async function predictRisk(patient: PatientInput): Promise<PredictionResponse> {
-  const res = await fetch(`${BASE_URL}/api/predict`, {
+  const res = await fetch(`${BASE_URL}/predict`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(patient),
@@ -23,7 +22,7 @@ export async function predictRisk(patient: PatientInput): Promise<PredictionResp
 }
 
 export async function explainPrediction(patient: PatientInput): Promise<ExplainabilityResponse> {
-  const res = await fetch(`${BASE_URL}/api/explain`, {
+  const res = await fetch(`${BASE_URL}/explain`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(patient),
@@ -36,7 +35,7 @@ export async function explainPrediction(patient: PatientInput): Promise<Explaina
 }
 
 export async function runWhatIf(original: PatientInput, modified: PatientInput) {
-  const response = await fetch(`${BASE_URL}/api/what-if`, {
+  const response = await fetch(`${BASE_URL}/what-if`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ original, modified }),
