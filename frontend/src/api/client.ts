@@ -1,7 +1,7 @@
 import { PatientInput, PredictionResponse, ExplainabilityResponse, HealthResponse } from '../types/api';
 
-// Normalize BASE_URL by stripping any trailing slashes
-const BASE_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
+// Normalize BASE_URL by stripping any trailing slashes, defaulting to live Render backend
+const BASE_URL = (import.meta.env.VITE_API_URL || 'https://cardiolens-ai-za8w.onrender.com').replace(/\/+$/, '');
 
 export async function checkHealth(): Promise<HealthResponse> {
   const res = await fetch(`${BASE_URL}/api/health`);
