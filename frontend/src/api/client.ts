@@ -1,49 +1,51 @@
 import { PatientInput, PredictionResponse, ExplainabilityResponse, HealthResponse } from '../types/api';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+// Normalize BASE_URL by stripping any trailing slashes
+const BASE_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
 
 export async function checkHealth(): Promise<HealthResponse> {
-  const res = await fetch(`${API_URL}/api/health`);
+  const res = await fetch(`${BASE_URL}/api/health`);
   if (!res.ok) throw new Error('Health check failed');
   return res.json();
 }
 
 export async function predictRisk(patient: PatientInput): Promise<PredictionResponse> {
-  const res = await fetch(`${API_URL}/api/predict`, {
+  const res = await fetch(`${BASE_URL}/api/predict`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(patient),
   });
-  if (!res.ok) throw new Error('Prediction API call failed');
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Prediction API call failed');
+  }
   return res.json();
 }
 
 export async function explainPrediction(patient: PatientInput): Promise<ExplainabilityResponse> {
-  const res = await fetch(`${API_URL}/api/explain`, {
+  const res = await fetch(`${BASE_URL}/api/explain`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(patient),
   });
-  if (!res.ok) throw new Error('Explainability API call failed');
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Explainability API call failed');
+  }
   return res.json();
 }
 
 export async function runWhatIf(original: PatientInput, modified: PatientInput) {
-  const response = await fetch(`${API_URL}/api/what-if`, {
+  const response = await fetch(`${BASE_URL}/api/what-if`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      original: original,
-      modified: modified,
-    }),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ original, modified }),
   });
 
   if (!response.ok) {
-    const errorDetail = await response.json();
+    const errorDetail = await response.json().catch(() => ({}));
     console.error('FastAPI Validation Detail:', errorDetail);
-    throw new Error('What-If API call failed');
+    throw new Error(errorDetail.detail || 'What-If API call failed');
   }
 
   return response.json();
