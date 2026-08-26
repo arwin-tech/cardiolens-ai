@@ -12,20 +12,28 @@ import pandas as pd
 from fastapi import FastAPI, File, HTTPException, UploadFile, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, Field, field_validator
 
 app = FastAPI(title="CardioLens AI API")
 
-# Setup CORS with explicit wildcard patterns for Vercel preview URLs
+# Configure CORS explicitly to allow all Vercel origin formats
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows Vercel preview & production domains seamlessly
+    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "https://cardiolens-ai-za8w.onrender.com",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Configure logging
+# Handle preflight OPTIONS requests directly
+@app.options("/{full_path:path}")
+async def options_handler(full_path: str):
+    return Response(status_code=200)
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -34,8 +42,26 @@ BASE_DIR = Path(__file__).resolve().parent
 MODEL_PATH = BASE_DIR / "models" / "model_pipeline.pkl"
 METADATA_PATH = BASE_DIR / "models" / "model_metadata.json"
 
-if not MODEL_PATH.exists():
-    MODEL_PATH = BASE_DIR.parent / "models" / "model_metadata.json"
+# Load model safely without crashing server startup
+model = None
+metadata = {}
+
+try:
+    if MODEL_PATH.exists():
+        model = joblib.load(MODEL_PATH)
+        logger.info("Successfully loaded model pipeline.")
+    else:
+        logger.warning(f"Model file not found at {MODEL_PATH}")
+except Exception as e:
+    logger.error(f"Failed to load model pipeline: {str(e)}")
+
+@app.get("/api/health")
+@app.get("/health")
+def health_check():
+    return {
+        "status": "healthy",
+        "model_loaded": model is not None
+    }
 
 # ============================================================================
 # SCHEMAS

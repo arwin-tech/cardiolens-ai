@@ -6,13 +6,17 @@ const rawEnvUrl = (import.meta.env.VITE_API_URL || DEFAULT_URL)
   .trim()
   .replace(/\/+$/, '');
 
-// Ensures BASE_URL strictly ends with /api
 const BASE_URL = rawEnvUrl.endsWith('/api') ? rawEnvUrl : `${rawEnvUrl}/api`;
 
 export async function checkHealth(): Promise<HealthResponse> {
-  const res = await fetch(`${BASE_URL}/health`);
-  if (!res.ok) throw new Error('Health check failed');
-  return res.json();
+  try {
+    const res = await fetch(`${BASE_URL}/health`, { method: 'GET' });
+    if (!res.ok) throw new Error(`Health status code: ${res.status}`);
+    return await res.json();
+  } catch (error) {
+    console.error('Health check failed:', error);
+    throw error;
+  }
 }
 
 export const predictRisk = async (data: PatientInput): Promise<PredictionResponse> => {
@@ -21,7 +25,11 @@ export const predictRisk = async (data: PatientInput): Promise<PredictionRespons
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
-  if (!response.ok) throw new Error('Prediction API call failed');
+  
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Prediction API call failed');
+  }
   return response.json();
 };
 
