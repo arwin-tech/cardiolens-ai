@@ -1,8 +1,12 @@
 import { PatientInput, PredictionResponse, ExplainabilityResponse, HealthResponse } from '../types/api';
 
 // Ensures BASE_URL points directly to the /api namespace without trailing slashes
-const RAW_URL = (import.meta.env.VITE_API_URL || 'https://cardiolens-ai-za8w.onrender.com').replace(/\/+$/, '');
-const BASE_URL = RAW_URL.endsWith('/api') ? RAW_URL : `${RAW_URL}/api`;
+// Strip out accidental brackets [], double quotes, single quotes, and trailing slashes
+const rawEnvUrl = (import.meta.env.VITE_API_URL || 'https://cardiolens-ai-za8w.onrender.com')
+  .replace(/[\[\]"']/g, '')
+  .replace(/\/+$/, '');
+
+const BASE_URL = rawEnvUrl.endsWith('/api') ? rawEnvUrl : `${rawEnvUrl}/api`;
 
 export async function checkHealth(): Promise<HealthResponse> {
   const res = await fetch(`${BASE_URL}/health`);
