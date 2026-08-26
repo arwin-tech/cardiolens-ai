@@ -16,18 +16,14 @@ export async function checkHealth(): Promise<HealthResponse> {
   return res.json();
 }
 
-export async function predictRisk(patient: PatientInput): Promise<PredictionResponse> {
-  const res = await fetch(`${BASE_URL}/predict`, {
+export const predictRisk = async (data: PatientData) => {
+  const response = await fetch(`${API_BASE_URL}/api/predict`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(patient),
+    body: JSON.stringify(data),
   });
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.detail || 'Prediction API call failed');
-  }
-  return res.json();
-}
+  return response.json();
+};
 
 export async function explainPrediction(patient: PatientInput): Promise<ExplainabilityResponse> {
   const res = await fetch(`${BASE_URL}/explain`, {
