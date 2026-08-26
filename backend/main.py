@@ -10,6 +10,7 @@ import pandas as pd
 from fastapi import FastAPI, File, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
+from contextlib import asynccontextmanager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -721,24 +722,27 @@ except Exception as e:
 # API ENDPOINTS
 # ============================================================================
 
-@app.get("/api/health", response_model=HealthResponse)
-async def health_check():
-    """Health check endpoint"""
+model_manager = ModelManager(str(MODEL_PATH))
 
-    return HealthResponse(
-        status=(
-            "healthy"
-            if model_manager and model_manager.is_loaded
-            else "degraded"
-        ),
-        service="CardioLens AI API",
-        model_loaded=(
-            model_manager.is_loaded
-            if model_manager
-            else False
-        ),
-        version="2.0.0"
-    )
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Ensure model is explicitly loaded on startup
+    model_manager.load_model()
+    app.state.model_manager = model_manager
+    yield
+
+app = FastAPI(title="CardioLens AI API", lifespan=lifespan)
+
+@app.get("/api/health")
+def health_check():
+    # Check instance state directly
+    is_loaded = (model_manager.model is not None) or (getattr(app.state, "model_manager", None) and app.state.model_manager.model is not None)
+    return {
+        "status": "healthy" if is_loaded else "degraded",
+        "service": "CardioLens AI API",
+        "model_loaded": is_loaded,
+        "version": "2.0.0"
+    }
 
 @app.get("/health", response_model=HealthResponse)
 async def render_health_check():
