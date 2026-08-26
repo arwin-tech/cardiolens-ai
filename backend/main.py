@@ -12,22 +12,32 @@ import pandas as pd
 from fastapi import FastAPI, File, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
+from fastapi.responses import JSONResponse
 
 app = FastAPI(title="CardioLens AI API")
 
-# Update CORS to allow Vercel previews and production
+# 1. Global CORS Middleware Setup
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "https://cardiolens-ai.vercel.app",  # Production Vercel domain
-    ],
-    allow_origin_regex=r"https://.*\.vercel\.app",  # Matches ALL Vercel preview URLs
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 2. Hard Catch-All for Preflight OPTIONS Requests
+@app.middleware("http")
+async def cors_preflight_override(request: Request, call_next):
+    if request.method == "OPTIONS":
+        response = JSONResponse(content={"status": "ok"})
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+        return response
+    
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    return response
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
