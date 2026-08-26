@@ -16,11 +16,23 @@ from fastapi.responses import JSONResponse
 
 app = FastAPI(title="CardioLens AI API")
 
-# 1. Standard CORS Configuration
+# Explicit base allowed origins
+origins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "https://cardiolens-ai.vercel.app",
+]
+
+# Append dynamic origins from Render environment variable if present
+env_origins = os.getenv("ALLOWED_ORIGINS")
+if env_origins:
+    origins.extend([o.strip() for o in env_origins.split(",") if o.strip()])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",  # Matches any Vercel preview deployment URL
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
