@@ -11,45 +11,20 @@ import numpy as np
 import pandas as pd
 from fastapi import FastAPI, File, HTTPException, UploadFile, status, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field, field_validator
-from fastapi.responses import JSONResponse
 
 app = FastAPI(title="CardioLens AI API")
 
-# Explicit base allowed origins
-origins = [
-    "http://localhost:5173",
-    "http://localhost:3000",
-    "https://cardiolens-ai.vercel.app",
-]
-
-# Append dynamic origins from Render environment variable if present
-env_origins = os.getenv("ALLOWED_ORIGINS")
-if env_origins:
-    origins.extend([o.strip() for o in env_origins.split(",") if o.strip()])
-
+# Setup CORS with explicit wildcard patterns for Vercel preview URLs
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_origins=["*"],  # Allows Vercel preview & production domains seamlessly
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 2. Universal Middleware to intercept OPTIONS requests before routing
-@app.middleware("http")
-async def force_cors_preflight(request: Request, call_next):
-    if request.method == "OPTIONS":
-        response = Response(status_code=200)
-        response.headers["Access-Control-Allow-Origin"] = "*"
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "*"
-        return response
-    
-    response = await call_next(request)
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    return response
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -60,8 +35,7 @@ MODEL_PATH = BASE_DIR / "models" / "model_pipeline.pkl"
 METADATA_PATH = BASE_DIR / "models" / "model_metadata.json"
 
 if not MODEL_PATH.exists():
-    MODEL_PATH = BASE_DIR.parent / "models" / "model_pipeline.pkl"
-    METADATA_PATH = BASE_DIR.parent / "models" / "model_metadata.json"
+    MODEL_PATH = BASE_DIR.parent / "models" / "model_metadata.json"
 
 # ============================================================================
 # SCHEMAS

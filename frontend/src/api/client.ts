@@ -1,13 +1,12 @@
 import { PatientInput, PredictionResponse, ExplainabilityResponse, HealthResponse } from '../types/api';
 
-// Ensures BASE_URL points directly to the /api namespace without trailing slashes
-// Strip out accidental brackets [], double quotes, single quotes, and trailing slashes
 const DEFAULT_URL = 'https://cardiolens-ai-za8w.onrender.com';
 const rawEnvUrl = (import.meta.env.VITE_API_URL || DEFAULT_URL)
   .replace(/[\[\]"']/g, '')
   .trim()
   .replace(/\/+$/, '');
 
+// Ensures BASE_URL strictly ends with /api
 const BASE_URL = rawEnvUrl.endsWith('/api') ? rawEnvUrl : `${rawEnvUrl}/api`;
 
 export async function checkHealth(): Promise<HealthResponse> {
@@ -16,12 +15,13 @@ export async function checkHealth(): Promise<HealthResponse> {
   return res.json();
 }
 
-export const predictRisk = async (data: PatientData) => {
-  const response = await fetch(`${API_BASE_URL}/api/predict`, {
+export const predictRisk = async (data: PatientInput): Promise<PredictionResponse> => {
+  const response = await fetch(`${BASE_URL}/predict`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
+  if (!response.ok) throw new Error('Prediction API call failed');
   return response.json();
 };
 
