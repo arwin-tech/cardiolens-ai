@@ -2,8 +2,10 @@ import { PatientInput, PredictionResponse, ExplainabilityResponse, HealthRespons
 
 // Ensures BASE_URL points directly to the /api namespace without trailing slashes
 // Strip out accidental brackets [], double quotes, single quotes, and trailing slashes
-const rawEnvUrl = (import.meta.env.VITE_API_URL || 'https://cardiolens-ai-za8w.onrender.com')
+const DEFAULT_URL = 'https://cardiolens-ai-za8w.onrender.com';
+const rawEnvUrl = (import.meta.env.VITE_API_URL || DEFAULT_URL)
   .replace(/[\[\]"']/g, '')
+  .trim()
   .replace(/\/+$/, '');
 
 const BASE_URL = rawEnvUrl.endsWith('/api') ? rawEnvUrl : `${rawEnvUrl}/api`;
