@@ -2,7 +2,6 @@ import io
 import json
 import logging
 import os
-from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -69,13 +68,19 @@ class WhatIfRequest(BaseModel):
     original: PatientInput
     modified: PatientInput
 
-# Dual routes so health checks resolve regardless of /api prefix
+# Dual routes with non-throwing attribute resolution
 @app.get("/health")
 @app.get("/api/health")
 def health_check():
+    # Safely inspect app.state without raising AttributeError
+    model_mgr = getattr(app.state, "model_manager", None)
+    is_loaded = (model_mgr is not None) or (model is not None)
+    
     return {
-        "status": "healthy",
-        "model_loaded": model is not None
+        "status": "healthy" if is_loaded else "degraded",
+        "service": "CardioLens AI API",
+        "model_loaded": is_loaded,
+        "version": "2.0.0"
     }
 
 # ============================================================================
