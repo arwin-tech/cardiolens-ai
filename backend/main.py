@@ -22,68 +22,6 @@ BASE_DIR = Path(__file__).resolve().parent
 MODEL_PATH = BASE_DIR / "models" / "model_pipeline.pkl"
 METADATA_PATH = BASE_DIR / "models" / "model_metadata.json"
 
-# Lifespan manager for loading models at startup
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    app.state.model_manager = None
-    try:
-        if MODEL_PATH.exists():
-            app.state.model_manager = joblib.load(MODEL_PATH)
-            logger.info("Successfully loaded model pipeline into app state.")
-        else:
-            logger.warning(f"Model file not found at {MODEL_PATH}")
-    except Exception as e:
-        logger.error(f"Failed to load model pipeline: {str(e)}")
-    
-    yield
-    
-    # Cleanup on shutdown
-    app.state.model_manager = None
-
-app = FastAPI(title="CardioLens AI API", lifespan=lifespan)
-
-# CORS configuration
-app.add_middleware(
-    CORSMiddleware,
-    allow_origin_regex=r"https://.*\.vercel\.app",
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "https://cardiolens-ai-za8w.onrender.com",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Pydantic Schemas
-class PatientInput(BaseModel):
-    age: int = Field(..., ge=1, le=120)
-    gender: int = Field(..., ge=1, le=2)
-    height: float = Field(..., ge=50, le=250)
-    weight: float = Field(..., ge=20, le=300)
-    ap_hi: int = Field(..., ge=50, le=250)
-    ap_lo: int = Field(..., ge=30, le=200)
-    cholesterol: int = Field(..., ge=1, le=3)
-    gluc: int = Field(..., ge=1, le=3)
-    smoke: int = Field(..., ge=0, le=1)
-    alco: int = Field(..., ge=0, le=1)
-    active: int = Field(..., ge=0, le=1)
-
-class WhatIfRequest(BaseModel):
-    original: PatientInput
-    modified: PatientInput
-
-# Health check endpoints
-@app.get("/health")
-@app.get("/api/health")
-def health_check():
-    model_mgr = getattr(app.state, "model_manager", None)
-    return {
-        "status": "healthy",
-        "model_loaded": model_mgr is not None
-    }
-
 # ============================================================================
 # SCHEMAS
 # ============================================================================
@@ -300,6 +238,7 @@ shap_explainer = SHAPExplainer(model_manager)
 async def lifespan(app: FastAPI):
     if not model_manager.is_loaded:
         model_manager.load()
+    app.state.model_manager = model_manager
     yield
 
 app = FastAPI(
@@ -309,7 +248,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
+origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000,https://cardiolens-ai-za8w.onrender.com").split(",")
 
 app.add_middleware(
     CORSMiddleware,
@@ -336,15 +275,15 @@ async def root():
         }
     }
 
-@app.get("/health")
-@app.get("/api/health")
+@app.get("/health", response_model=HealthResponse)
+@app.get("/api/health", response_model=HealthResponse)
 async def health_check():
-    return {
-        "status": "healthy",
-        "service": "CardioLens AI API",
-        "model_loaded": app.state.model_manager is not None,
-        "version": "2.0.0"
-    }
+    return HealthResponse(
+        status="healthy" if model_manager.is_loaded else "degraded",
+        service="CardioLens AI API",
+        model_loaded=model_manager.is_loaded,
+        version="2.0.0"
+    )
 
 @app.post("/api/predict", response_model=PredictionResponse)
 async def predict(patient: PatientInput):
