@@ -2,6 +2,7 @@ import io
 import json
 import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -13,9 +14,35 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field, field_validator
 
-app = FastAPI(title="CardioLens AI API")
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Configure CORS to permit requests from all Vercel origins and local dev
+# Base path resolution
+BASE_DIR = Path(__file__).resolve().parent
+MODEL_PATH = BASE_DIR / "models" / "model_pipeline.pkl"
+METADATA_PATH = BASE_DIR / "models" / "model_metadata.json"
+
+# Lifespan manager for loading models at startup
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.model_manager = None
+    try:
+        if MODEL_PATH.exists():
+            app.state.model_manager = joblib.load(MODEL_PATH)
+            logger.info("Successfully loaded model pipeline into app state.")
+        else:
+            logger.warning(f"Model file not found at {MODEL_PATH}")
+    except Exception as e:
+        logger.error(f"Failed to load model pipeline: {str(e)}")
+    
+    yield
+    
+    # Cleanup on shutdown
+    app.state.model_manager = None
+
+app = FastAPI(title="CardioLens AI API", lifespan=lifespan)
+
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"https://.*\.vercel\.app",
@@ -29,28 +56,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Base path resolution for model loading
-BASE_DIR = Path(__file__).resolve().parent
-MODEL_PATH = BASE_DIR / "models" / "model_pipeline.pkl"
-METADATA_PATH = BASE_DIR / "models" / "model_metadata.json"
-
-# Load model safely without blowing up server initialization
-model = None
-metadata = {}
-
-try:
-    if MODEL_PATH.exists():
-        model = joblib.load(MODEL_PATH)
-        logger.info("Successfully loaded model pipeline.")
-    else:
-        logger.warning(f"Model file not found at {MODEL_PATH}")
-except Exception as e:
-    logger.error(f"Failed to load model pipeline: {str(e)}")
-
-# Pydantic Input Schemas
+# Pydantic Schemas
 class PatientInput(BaseModel):
     age: int = Field(..., ge=1, le=120)
     gender: int = Field(..., ge=1, le=2)
@@ -68,19 +74,14 @@ class WhatIfRequest(BaseModel):
     original: PatientInput
     modified: PatientInput
 
-# Dual routes with non-throwing attribute resolution
+# Health check endpoints
 @app.get("/health")
 @app.get("/api/health")
 def health_check():
-    # Safely inspect app.state without raising AttributeError
     model_mgr = getattr(app.state, "model_manager", None)
-    is_loaded = (model_mgr is not None) or (model is not None)
-    
     return {
-        "status": "healthy" if is_loaded else "degraded",
-        "service": "CardioLens AI API",
-        "model_loaded": is_loaded,
-        "version": "2.0.0"
+        "status": "healthy",
+        "model_loaded": model_mgr is not None
     }
 
 # ============================================================================
