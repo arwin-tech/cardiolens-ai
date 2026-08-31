@@ -437,3 +437,7 @@ export default {
   formatPrediction,
   useBackendStatus,
 };
+
+// Backward-compatibility export aliases
+export { whatIfAnalysis as runWhatIf };
+export { healthCheck as checkHealth };
