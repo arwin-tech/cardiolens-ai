@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { checkHealth } from '../api/client';
+import { healthCheck } from '../api/client';
 import { CheckCircle2, AlertTriangle } from 'lucide-react';
 
 export default function ServiceStatus() {
