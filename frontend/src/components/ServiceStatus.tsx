@@ -8,12 +8,18 @@ export default function ServiceStatus() {
   useEffect(() => {
     const verify = async () => {
       try {
-        await checkHealth();
-        setOnline(true);
+        const res = await healthCheck();
+        // Check if the response object indicates a healthy state
+        if (res && (res.ok || res.status === 'healthy')) {
+          setOnline(true);
+        } else {
+          setOnline(false);
+        }
       } catch {
         setOnline(false);
       }
     };
+
     verify();
     const interval = setInterval(verify, 30000);
     return () => clearInterval(interval);
@@ -26,7 +32,7 @@ export default function ServiceStatus() {
       ) : online ? (
         <>
           <CheckCircle2 className="h-4 w-4 text-[#6B9E7E]" />
-          <span className="text-gray-700">API Live (127.0.0.1:8000)</span>
+          <span className="text-gray-700">Backend Online</span>
         </>
       ) : (
         <>

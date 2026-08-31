@@ -199,7 +199,10 @@ class ModelManager:
 
         proba = self.model.predict_proba(features)[0]
         risk_prob = float(proba[1])
-        bmi = patient.weight / ((patient.height / 100) ** 2)
+        
+        # Standardise height unit auto-detection (cm vs m)
+        height_m = patient.height / 100.0 if patient.height > 3 else patient.height
+        bmi = round(patient.weight / (height_m ** 2), 1) if height_m > 0 else 0.0
 
         # Categorize risk
         if risk_prob < 0.3:
@@ -215,7 +218,7 @@ class ModelManager:
             "risk_probability": risk_prob,
             "risk_percentage": risk_prob * 100,
             "risk_category": category,
-            "bmi": round(bmi, 1),
+            "bmi": bmi,
             "features_array": features[0].tolist()
         }
 
