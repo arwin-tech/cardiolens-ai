@@ -1,0 +1,1 @@
+{"model_name": "XGBoost Cardiovascular Risk", "version": "2.1.0", "features": ["age", "gender", "height", "weight", "ap_hi", "ap_lo", "cholesterol", "gluc", "smoke", "alco", "active"]} 
