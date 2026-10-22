@@ -1,1 +1,29 @@
-{"model_name": "XGBoost Cardiovascular Risk", "version": "2.1.0", "features": ["age", "gender", "height", "weight", "ap_hi", "ap_lo", "cholesterol", "gluc", "smoke", "alco", "active"]} 
+{
+  "model_name": "XGBoost Cardiovascular Risk",
+  "version": "2.1.0",
+  "features": [
+    "age",
+    "gender",
+    "height",
+    "weight",
+    "ap_hi",
+    "ap_lo",
+    "cholesterol",
+    "gluc",
+    "smoke",
+    "alco",
+    "active"
+  ],
+  "test_metrics": {
+    "accuracy": 0.7324,
+    "precision": 0.7508,
+    "recall": 0.6951,
+    "f1": 0.7219,
+    "roc_auc": 0.7978,
+    "test_samples": 14000
+  },
+  "trained_with": {
+    "scikit-learn": "1.6.1",
+    "xgboost": "2.1.4"
+  }
+}

@@ -178,11 +178,11 @@ class ModelManager:
                 "cholesterol", "gluc", "smoke", "alco", "active"
             ],
             "test_metrics": {
-                "accuracy": 0.732,
-                "precision": 0.73,
-                "recall": 0.74,
-                "f1": 0.735,
-                "roc_auc": 0.798
+                "accuracy": 0.7324,
+                "precision": 0.7508,
+                "recall": 0.6951,
+                "f1": 0.7219,
+                "roc_auc": 0.7978
             }
         }
 

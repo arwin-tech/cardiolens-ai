@@ -70,7 +70,6 @@ Phase 2 wraps the existing Phase 1 AI pipeline (data loading, model training, SH
 │  ├─ predictor.py                        │
 │  ├─ explainer.py (SHAP)                 │
 │  ├─ counterfactual.py                   │
-│  ├─ llm_reasoner.py                     │
 │  └─ model artifacts (XGBoost)           │
 └─────────────────────────────────────────┘
 
@@ -763,7 +762,6 @@ cardiolens-ai/
 │   ├── predictor.py
 │   ├── explainer.py
 │   ├── counterfactual.py
-│   └── llm_reasoner.py
 │
 ├── app.py                       # Phase 1 Streamlit (still works)
 │

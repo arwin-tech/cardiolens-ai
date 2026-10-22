@@ -27,9 +27,13 @@ SHAP analysis shows that systolic blood pressure is by far the biggest factor in
   <img src="explainability/shap_bar.png" alt="SHAP feature importance" width="60%">
 </p>
 
+## SQL Data Layer
+
+The `sql/` folder rebuilds the data preparation in SQL with DuckDB: a data-quality profile (it flags 1,321 physiologically impossible blood-pressure readings), cleaning and feature engineering, and disease rates by age band and blood-pressure category. The deployed model is unchanged. To run it: `pip install duckdb`, then `python train_from_sql.py`.
+
 ## Tech Stack
 
-- **ML:** Python, XGBoost, scikit-learn, SHAP
+- **ML:** Python, XGBoost, scikit-learn, SHAP, SQL (DuckDB)
 - **Backend:** FastAPI, hosted on Render
 - **Frontend:** React, TypeScript, Vite, Tailwind CSS, Recharts, hosted on Vercel
 
@@ -40,7 +44,7 @@ You need Python 3.10+ and Node.js 18+.
 **1. Start the backend**
 
 ```bash
-git clone https://github.com/<your-username>/cardiolens-ai.git
+git clone https://github.com/arwin-tech/cardiolens-ai.git
 cd cardiolens-ai
 pip install -r backend/requirements.txt
 cd backend
@@ -68,4 +72,5 @@ frontend/         React web app
 src/              Training and explainability scripts
 data/             Dataset
 explainability/   SHAP charts
+sql/              Data profiling and feature engineering in SQL (DuckDB)
 ```
