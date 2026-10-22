@@ -1,39 +1,67 @@
+import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Activity } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
+import medallion from '../assets/logo-medallion.png';
+import filigree from '../assets/filigree-corner.webp';
+
+const LINKS = [
+  { name: 'Home', path: '/' },
+  { name: 'Analyze Risk', path: '/analyze' },
+  { name: 'Results', path: '/results' },
+  { name: 'About Model', path: '/about' },
+];
 
 export default function Navbar() {
-  const location = useLocation();
+  const { pathname } = useLocation();
+  const [open, setOpen] = useState(false);
 
-  const navLinks = [
-    { name: 'Home', path: '/' },
-    { name: 'Analyze Risk', path: '/analyze' },
-    { name: 'Results', path: '/results' },
-    { name: 'About Model', path: '/about' },
-  ];
+  useEffect(() => setOpen(false), [pathname]);
 
   return (
-    <header className="sticky top-0 z-50 bg-[#FFFBF8]/90 backdrop-blur-md border-b border-[#E8DFD9]">
-      <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-        <Link to="/" className="flex items-center space-x-3">
-          <div className="p-2 bg-[#8B2D2D] text-white rounded-medical">
-            <Activity className="h-5 w-5" />
-          </div>
-          <span className="font-bold text-xl tracking-tight text-[#8B2D2D]">CardioLens<span className="text-[#2C2C2C] font-normal">.AI</span></span>
+    <header className="site-header">
+      <img src={filigree} alt="" aria-hidden="true" className="header-filigree header-filigree--left" />
+      <img src={filigree} alt="" aria-hidden="true" className="header-filigree header-filigree--right" />
+
+      <div className="site-header__inner">
+        <Link to="/" className="brand" aria-label="CardioLens AI, home">
+          <img src={medallion} alt="" className="brand__medallion" width={56} height={56} />
+          <span className="brand__name">CardioLens.AI</span>
         </Link>
-        <nav className="flex items-center space-x-8">
-          {navLinks.map((link) => (
+
+        <nav className="nav" aria-label="Main">
+          {LINKS.map((link) => (
             <Link
               key={link.path}
               to={link.path}
-              className={`text-sm font-medium transition-colors ${
-                location.pathname === link.path ? 'text-[#8B2D2D] font-semibold' : 'text-gray-600 hover:text-[#8B2D2D]'
-              }`}
+              className="nav__link"
+              aria-current={pathname === link.path ? 'page' : undefined}
             >
               {link.name}
             </Link>
           ))}
         </nav>
+
+        <button
+          type="button"
+          className="nav-toggle"
+          aria-expanded={open}
+          aria-controls="mobile-nav"
+          aria-label={open ? 'Close menu' : 'Open menu'}
+          onClick={() => setOpen((o) => !o)}
+        >
+          {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </button>
       </div>
+
+      {open && (
+        <nav id="mobile-nav" className="mobile-nav" aria-label="Main">
+          {LINKS.map((link) => (
+            <Link key={link.path} to={link.path} aria-current={pathname === link.path ? 'page' : undefined}>
+              {link.name}
+            </Link>
+          ))}
+        </nav>
+      )}
     </header>
   );
 }

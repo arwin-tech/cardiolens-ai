@@ -1,51 +1,35 @@
-interface WhatIfData {
-  original_risk?: number;
-  original_risk_percentage?: number;
-  simulated_risk?: number;
-  simulated_risk_percentage?: number;
-  risk_delta?: number;
-  original_ap_hi?: number | string;
-  original_features?: { ap_hi?: number | string };
-  target_ap_hi?: number | string;
-  modified_features?: { ap_hi?: number | string };
-}
+import { WhatIfResponse } from '../types/api';
 
-export default function WhatIfComparison({ data }: { data: WhatIfData | null }) {
+export default function WhatIfComparison({ data }: { data: WhatIfResponse | null }) {
   if (!data) return null;
 
-  const origRisk = data.original_risk ?? data.original_risk_percentage ?? 0;
-  const simRisk = data.simulated_risk ?? data.simulated_risk_percentage ?? 0;
-  const delta = data.risk_delta ?? (simRisk - origRisk);
-  const origBp = data.original_ap_hi ?? data.original_features?.ap_hi ?? '--';
-  const targetBp = data.target_ap_hi ?? data.modified_features?.ap_hi ?? '--';
-
-  const isReduced = delta <= 0;
+  const { original_risk: origRisk, simulated_risk: simRisk } = data;
+  const delta = data.risk_delta ?? simRisk - origRisk;
+  const reduced = delta <= 0;
+  const deltaColor = reduced ? '#6FAE7E' : '#D9574B';
 
   return (
-    <div className="mt-6 p-5 bg-white border border-[#E8DFD9] rounded-xl shadow-sm space-y-4">
-      <h5 className="text-md font-bold text-[#8B2D2D]">Counterfactual Simulation Results</h5>
-      
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
-        <div className="p-4 bg-[#F9F7F4] rounded-lg border border-[#E8DFD9]">
-          <span className="text-xs text-gray-500 uppercase font-semibold block">Baseline Risk</span>
-          <span className="text-xl font-extrabold text-gray-800">{origRisk.toFixed(1)}%</span>
+    <div className="mt-6 space-y-4" aria-live="polite">
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div className="stat">
+          <span className="stat__label">Current risk</span>
+          <span className="stat__value">{origRisk.toFixed(1)}%</span>
         </div>
-
-        <div className="p-4 bg-[#F9F7F4] rounded-lg border border-[#E8DFD9]">
-          <span className="text-xs text-gray-500 uppercase font-semibold block">Simulated Risk</span>
-          <span className="text-xl font-extrabold text-[#8B2D2D]">{simRisk.toFixed(1)}%</span>
+        <div className="stat">
+          <span className="stat__label">Simulated risk</span>
+          <span className="stat__value">{simRisk.toFixed(1)}%</span>
         </div>
-
-        <div className={`p-4 rounded-lg border ${isReduced ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
-          <span className="text-xs uppercase font-semibold block">Net Risk Delta</span>
-          <span className="text-xl font-extrabold">
-            {delta > 0 ? `+${delta.toFixed(1)}%` : `${delta.toFixed(1)}%`}
+        <div className="stat" style={{ borderColor: `${deltaColor}88` }}>
+          <span className="stat__label">Change</span>
+          <span className="stat__value" style={{ color: deltaColor }}>
+            {delta > 0 ? '+' : delta < 0 ? '−' : ''}
+            {Math.abs(delta).toFixed(1)} points
           </span>
         </div>
       </div>
-
-      <p className="text-xs text-gray-600 bg-[#F9F7F4] p-3 rounded-lg border border-[#E8DFD9]">
-        Targeted intervention: Modified Systolic Blood Pressure from <strong>{origBp} mmHg</strong> to <strong>{targetBp} mmHg</strong>.
+      <p className="text-stone">
+        Systolic blood pressure changed from <strong className="font-medium text-parchment">{data.original_ap_hi} mmHg</strong> to{' '}
+        <strong className="font-medium text-parchment">{data.target_ap_hi} mmHg</strong>, with diastolic pressure capped at 80 mmHg.
       </p>
     </div>
   );

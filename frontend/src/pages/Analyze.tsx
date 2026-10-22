@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PatientForm from '../components/PatientForm';
+import { PageBackdrop, PageHeader } from '../components/Backdrop';
 import { predictRisk, explainPrediction } from '../api/client';
 import { PatientInput } from '../types/api';
 import { useBackendState } from '../context/BackendStatus';
@@ -18,7 +19,7 @@ export default function Analyze() {
     try {
       const prediction = await predictRisk(data);
       const explanation = await explainPrediction(data);
-      
+
       sessionStorage.setItem('lastPrediction', JSON.stringify(prediction));
       sessionStorage.setItem('lastExplanation', JSON.stringify(explanation));
 
@@ -31,26 +32,29 @@ export default function Analyze() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-10 space-y-8">
-      <div>
-        <h2 className="text-3xl font-extrabold text-[#8B2D2D]">Run Risk Assessment</h2>
-        <p className="text-sm text-gray-600 mt-1">Enter patient clinical metrics below to execute model evaluation.</p>
+    <div className="page">
+      <PageBackdrop />
+      <PageHeader
+        title="Run a risk assessment"
+        intro="Enter a patient's details or start from an example. You'll get a risk score and a breakdown of the factors behind it."
+      />
+
+      <div className="mx-auto max-w-4xl space-y-6 px-5">
+        {waking && !error && (
+          <div className="notice">
+            The demo runs on a free server that sleeps when idle, so it can take up to a minute to wake up. You can fill
+            in the form or pick an example now, and your result will appear as soon as it's ready.
+          </div>
+        )}
+
+        {error && (
+          <div className="notice notice--error" role="alert">
+            {error}
+          </div>
+        )}
+
+        <PatientForm onSubmit={handleFormSubmit} loading={loading} waking={waking} />
       </div>
-
-      {waking && !error && (
-        <div className="p-4 bg-[#FFFBF8] border border-[#E8DFD9] text-gray-700 text-sm rounded-lg">
-          The demo runs on a free server that sleeps when idle, so it can take up to a minute to wake up.
-          You can fill in the form or pick an example now, and your result will appear as soon as it's ready.
-        </div>
-      )}
-
-      {error && (
-        <div className="p-4 bg-[#A84040]/10 border border-[#A84040] text-[#A84040] text-sm rounded-lg">
-          {error}
-        </div>
-      )}
-
-      <PatientForm onSubmit={handleFormSubmit} loading={loading} waking={waking} />
     </div>
   );
 }

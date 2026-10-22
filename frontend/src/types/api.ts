@@ -33,6 +33,8 @@ export interface SHAPFeature {
 export interface ExplainabilityResponse {
   features: SHAPFeature[];
   base_value: number;
+  prediction_value?: number;
+  disclaimer?: string;
 }
 
 export interface WhatIfResponse {
@@ -41,7 +43,12 @@ export interface WhatIfResponse {
   risk_delta: number;
   original_ap_hi: number;
   target_ap_hi: number;
-  modified_features: string[];
+}
+
+export interface BatchResponse {
+  total_records: number;
+  high_risk_count: number;
+  results: Array<Record<string, string | number | boolean | null>>;
 }
 
 export interface HealthResponse {

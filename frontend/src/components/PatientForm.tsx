@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { ChangeEvent, FormEvent, ReactNode, useState } from 'react';
 import { PatientInput } from '../types/api';
+import { FramedPanel, OrnateButton } from './ornaments';
 
 interface Props {
   onSubmit: (data: PatientInput) => void;
@@ -8,11 +9,22 @@ interface Props {
 }
 
 // Example patients across the risk range (model output: about 13%, 47% and 91%)
-const EXAMPLES: { label: string; data: PatientInput }[] = [
-  { label: 'Low-risk example', data: { age: 34, gender: 1, height: 168, weight: 60, ap_hi: 115, ap_lo: 75, cholesterol: 1, gluc: 1, smoke: 0, alco: 0, active: 1 } },
-  { label: 'Moderate example', data: { age: 53, gender: 2, height: 176, weight: 84, ap_hi: 135, ap_lo: 85, cholesterol: 1, gluc: 1, smoke: 1, alco: 0, active: 1 } },
-  { label: 'High-risk example', data: { age: 61, gender: 2, height: 172, weight: 98, ap_hi: 165, ap_lo: 100, cholesterol: 3, gluc: 2, smoke: 1, alco: 0, active: 0 } },
+const EXAMPLES: { label: string; color: string; data: PatientInput }[] = [
+  { label: 'Low-risk example', color: '#6FAE7E', data: { age: 34, gender: 1, height: 168, weight: 60, ap_hi: 115, ap_lo: 75, cholesterol: 1, gluc: 1, smoke: 0, alco: 0, active: 1 } },
+  { label: 'Moderate example', color: '#D0A15A', data: { age: 53, gender: 2, height: 176, weight: 84, ap_hi: 135, ap_lo: 85, cholesterol: 1, gluc: 1, smoke: 1, alco: 0, active: 1 } },
+  { label: 'High-risk example', color: '#C8322B', data: { age: 61, gender: 2, height: 172, weight: 98, ap_hi: 165, ap_lo: 100, cholesterol: 3, gluc: 2, smoke: 1, alco: 0, active: 0 } },
 ];
+
+function Field({ id, label, hint, wide, children }: { id: string; label: string; hint?: string; wide?: boolean; children: ReactNode }) {
+  return (
+    <div className={wide ? 'md:col-span-2' : undefined}>
+      <label htmlFor={id} className="field-label">
+        {label} {hint && <span className="field-hint">({hint})</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
 
 export default function PatientForm({ onSubmit, loading, waking = false }: Props) {
   const [formData, setFormData] = useState<PatientInput>({
@@ -28,120 +40,114 @@ export default function PatientForm({ onSubmit, loading, waking = false }: Props
     alco: 0,
     active: 1,
   });
+  const [formError, setFormError] = useState<string | null>(null);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: Number(value) }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
+    if (formData.ap_lo >= formData.ap_hi) {
+      setFormError('Diastolic pressure must be lower than systolic pressure.');
+      return;
+    }
+    setFormError(null);
     onSubmit(formData);
   };
 
+  const number = (name: keyof PatientInput, min: number, max: number, step = 1) => (
+    <input
+      id={`f-${name}`}
+      className="field"
+      type="number"
+      name={name}
+      min={min}
+      max={max}
+      step={step}
+      value={formData[name]}
+      onChange={handleChange}
+      required
+    />
+  );
+
+  const select = (name: keyof PatientInput, options: [number, string][]) => (
+    <select id={`f-${name}`} className="field" name={name} value={formData[name]} onChange={handleChange}>
+      {options.map(([value, text]) => (
+        <option key={value} value={value}>
+          {text}
+        </option>
+      ))}
+    </select>
+  );
+
+  const levels: [number, string][] = [
+    [1, 'Normal'],
+    [2, 'Above normal'],
+    [3, 'Well above normal'],
+  ];
+  const yesNo: [number, string][] = [
+    [0, 'No'],
+    [1, 'Yes'],
+  ];
+
   return (
-    <form onSubmit={handleSubmit} className="bg-[#FFFBF8] border border-[#E8DFD9] p-8 rounded-medical shadow-sm space-y-6">
-      <h3 className="text-xl font-bold text-[#8B2D2D] border-b border-[#E8DFD9] pb-3">Patient Clinical Input Parameters</h3>
+    <FramedPanel aria-labelledby="patient-details-title">
+      <form onSubmit={handleSubmit}>
+        <h2 id="patient-details-title" className="panel__title">
+          Patient details
+        </h2>
+        <div className="rule" />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold uppercase text-gray-500">Try an example:</span>
-        {EXAMPLES.map((ex) => (
-          <button
-            key={ex.label}
-            type="button"
-            disabled={loading}
-            onClick={() => { setFormData(ex.data); onSubmit(ex.data); }}
-            className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#E8DFD9] bg-white text-[#8B2D2D] hover:border-[#8B2D2D] disabled:opacity-50"
-          >
-            {ex.label}
-          </button>
-        ))}
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Age (Years)</label>
-          <input type="number" name="age" min="18" max="100" value={formData.age} onChange={handleChange} required className="w-full p-2.5 bg-white border border-[#E8DFD9] rounded-lg text-sm focus:outline-none focus:border-[#8B2D2D]" />
+        <div className="mb-8 flex flex-wrap items-center gap-2.5">
+          <span className="mr-1 text-stone">Try an example:</span>
+          {EXAMPLES.map((ex) => (
+            <button
+              key={ex.label}
+              type="button"
+              className="chip"
+              disabled={loading}
+              onClick={() => {
+                setFormData(ex.data);
+                setFormError(null);
+                onSubmit(ex.data);
+              }}
+            >
+              <span className="chip__dot" style={{ background: ex.color }} aria-hidden="true" />
+              {ex.label}
+            </button>
+          ))}
         </div>
 
-        <div>
-          <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Gender</label>
-          <select name="gender" value={formData.gender} onChange={handleChange} className="w-full p-2.5 bg-white border border-[#E8DFD9] rounded-lg text-sm focus:outline-none focus:border-[#8B2D2D]">
-            <option value={1}>Female (1)</option>
-            <option value={2}>Male (2)</option>
-          </select>
+        <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+          <Field id="f-age" label="Age" hint="years">{number('age', 18, 100)}</Field>
+          <Field id="f-gender" label="Gender">{select('gender', [[1, 'Female'], [2, 'Male']])}</Field>
+          <Field id="f-height" label="Height" hint="cm">{number('height', 100, 250)}</Field>
+          <Field id="f-weight" label="Weight" hint="kg">{number('weight', 30, 300, 0.1)}</Field>
+          <Field id="f-ap_hi" label="Systolic blood pressure" hint="mmHg">{number('ap_hi', 60, 250)}</Field>
+          <Field id="f-ap_lo" label="Diastolic blood pressure" hint="mmHg">{number('ap_lo', 30, 180)}</Field>
+          <Field id="f-cholesterol" label="Cholesterol">{select('cholesterol', levels)}</Field>
+          <Field id="f-gluc" label="Glucose">{select('gluc', levels)}</Field>
+          <Field id="f-smoke" label="Smoker">{select('smoke', yesNo)}</Field>
+          <Field id="f-alco" label="Regular alcohol intake">{select('alco', yesNo)}</Field>
+          <Field id="f-active" label="Physical activity" wide>
+            {select('active', [[1, 'Active lifestyle'], [0, 'Sedentary lifestyle']])}
+          </Field>
         </div>
 
-        <div>
-          <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Height (cm)</label>
-          <input type="number" name="height" min="100" max="250" value={formData.height} onChange={handleChange} required className="w-full p-2.5 bg-white border border-[#E8DFD9] rounded-lg text-sm focus:outline-none focus:border-[#8B2D2D]" />
-        </div>
+        {formError && (
+          <p className="notice notice--error mt-6" role="alert">
+            {formError}
+          </p>
+        )}
 
-        <div>
-          <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Weight (kg)</label>
-          <input type="number" name="weight" min="30" max="300" value={formData.weight} onChange={handleChange} required className="w-full p-2.5 bg-white border border-[#E8DFD9] rounded-lg text-sm focus:outline-none focus:border-[#8B2D2D]" />
+        <div className="mt-9">
+          <OrnateButton type="submit" tone="crimson" block disabled={loading}>
+            {loading ? (waking ? 'Waking up the model (up to a minute)…' : 'Calculating risk…') : 'Evaluate risk score'}
+          </OrnateButton>
         </div>
-
-        <div>
-          <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Systolic BP (ap_hi)</label>
-          <input type="number" name="ap_hi" min="60" max="250" value={formData.ap_hi} onChange={handleChange} required className="w-full p-2.5 bg-white border border-[#E8DFD9] rounded-lg text-sm focus:outline-none focus:border-[#8B2D2D]" />
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Diastolic BP (ap_lo)</label>
-          <input type="number" name="ap_lo" min="30" max="180" value={formData.ap_lo} onChange={handleChange} required className="w-full p-2.5 bg-white border border-[#E8DFD9] rounded-lg text-sm focus:outline-none focus:border-[#8B2D2D]" />
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Cholesterol Level</label>
-          <select name="cholesterol" value={formData.cholesterol} onChange={handleChange} className="w-full p-2.5 bg-white border border-[#E8DFD9] rounded-lg text-sm focus:outline-none focus:border-[#8B2D2D]">
-            <option value={1}>1: Normal</option>
-            <option value={2}>2: Above Normal</option>
-            <option value={3}>3: Well Above Normal</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Glucose Level</label>
-          <select name="gluc" value={formData.gluc} onChange={handleChange} className="w-full p-2.5 bg-white border border-[#E8DFD9] rounded-lg text-sm focus:outline-none focus:border-[#8B2D2D]">
-            <option value={1}>1: Normal</option>
-            <option value={2}>2: Above Normal</option>
-            <option value={3}>3: Well Above Normal</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Smoker</label>
-          <select name="smoke" value={formData.smoke} onChange={handleChange} className="w-full p-2.5 bg-white border border-[#E8DFD9] rounded-lg text-sm focus:outline-none focus:border-[#8B2D2D]">
-            <option value={0}>No (0)</option>
-            <option value={1}>Yes (1)</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Alcohol Intake</label>
-          <select name="alco" value={formData.alco} onChange={handleChange} className="w-full p-2.5 bg-white border border-[#E8DFD9] rounded-lg text-sm focus:outline-none focus:border-[#8B2D2D]">
-            <option value={0}>No (0)</option>
-            <option value={1}>Yes (1)</option>
-          </select>
-        </div>
-
-        <div className="md:col-span-2">
-          <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Physical Activity</label>
-          <select name="active" value={formData.active} onChange={handleChange} className="w-full p-2.5 bg-white border border-[#E8DFD9] rounded-lg text-sm focus:outline-none focus:border-[#8B2D2D]">
-            <option value={1}>Active Lifestyle (1)</option>
-            <option value={0}>Sedentary Lifestyle (0)</option>
-          </select>
-        </div>
-      </div>
-
-      <button
-        type="submit"
-        disabled={loading}
-        className="w-full py-3 bg-[#8B2D2D] hover:bg-[#722323] text-white font-semibold rounded-medical transition-all shadow-sm disabled:opacity-50"
-      >
-        {loading ? (waking ? 'Waking up the model (up to a minute)...' : 'Executing Risk Prediction...') : 'Evaluate Risk Score'}
-      </button>
-    </form>
+      </form>
+    </FramedPanel>
   );
 }

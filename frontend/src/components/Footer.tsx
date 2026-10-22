@@ -1,11 +1,22 @@
 export default function Footer() {
   return (
-    <footer className="bg-[#FFFBF8] border-t border-[#E8DFD9] mt-20 py-8 text-center text-xs text-gray-500">
-      <div className="max-w-7xl mx-auto px-6 space-y-2">
-        <p className="font-medium text-gray-700">CardioLens AI — Clinical Risk & Explainable Intelligence System</p>
-        <p>DISCLAIMER: This system is a research-grade tool intended strictly for clinical evaluation and educational demonstration. It is not a certified medical diagnostic system.</p>
-        <p>© 2026 CardioLens AI Project. All Rights Reserved.</p>
-      </div>
+    <footer className="site-footer">
+      <p className="site-footer__name">CardioLens AI</p>
+      <p className="mx-auto mt-2 max-w-2xl">
+        A research and learning project, not a certified medical device. Predictions come from a statistical model
+        and must not be used to diagnose or treat anyone.
+      </p>
+      <p className="mt-2">
+        © 2026 CardioLens AI.{' '}
+        <a
+          href="https://github.com/arwin-tech/cardiolens-ai"
+          className="text-parchment underline decoration-gold/50 underline-offset-4 hover:text-cream"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Source code on GitHub
+        </a>
+      </p>
     </footer>
   );
 }
