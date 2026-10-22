@@ -40,6 +40,17 @@ const SECTIONS = [
   },
 ];
 
+// From models/fairness_report.json (src/fairness_check.py)
+const FAIRNESS: [string, string, string, string, string][] = [
+  ['Women', '9,080', '0.793', '68.6%', '1.6%'],
+  ['Men', '4,920', '0.806', '71.1%', '1.4%'],
+  ['Under 45', '2,033', '0.837', '57.4%', '1.7%'],
+  ['45–49', '1,793', '0.786', '61.1%', '3.8%'],
+  ['50–54', '3,732', '0.786', '60.9%', '1.9%'],
+  ['55–59', '3,254', '0.750', '67.5%', '1.5%'],
+  ['60 and over', '3,188', '0.715', '85.2%', '2.5%'],
+];
+
 export default function About() {
   return (
     <div className="page">
@@ -76,6 +87,43 @@ export default function About() {
             </FramedPanel>
           ))}
         </div>
+
+        <FramedPanel corners={false} aria-labelledby="about-fairness">
+          <h2 id="about-fairness" className="panel__title">
+            Fairness check
+          </h2>
+          <div className="rule" />
+          <p className="leading-relaxed text-stone">
+            Women and men get almost identical performance. Age is where the model differs: the percentages stay well
+            calibrated in every age band, but at the 50% cut-off it catches 57% of disease cases in patients under 45
+            versus 85% in patients 60 and over, because younger patients get lower scores overall.
+          </p>
+          <div className="mt-5 overflow-x-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Group</th>
+                  <th>Patients</th>
+                  <th>ROC-AUC</th>
+                  <th>Cases caught at 50%</th>
+                  <th>Calibration error</th>
+                </tr>
+              </thead>
+              <tbody>
+                {FAIRNESS.map(([group, n, auc, recall, ece]) => (
+                  <tr key={group}>
+                    <td className="text-parchment">{group}</td>
+                    <td>{n}</td>
+                    <td>{auc}</td>
+                    <td>{recall}</td>
+                    <td>{ece}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-4 text-[0.95rem] text-stone-2">From src/fairness_check.py, on the same 14,000 test patients.</p>
+        </FramedPanel>
 
         <div className="notice text-center">
           A research and learning project, not a medical device. Do not use it to diagnose or treat anyone.

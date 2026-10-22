@@ -1,0 +1,100 @@
+{
+  "test_patients": 14000,
+  "threshold": 0.5,
+  "overall": {
+    "patients": 14000,
+    "disease_rate": 0.4997,
+    "mean_predicted_risk": 0.5005,
+    "roc_auc": 0.7978,
+    "recall": 0.6951,
+    "precision": 0.7508,
+    "ece": 0.0154,
+    "brier": 0.1823
+  },
+  "by_sex": {
+    "female": {
+      "patients": 9080,
+      "disease_rate": 0.4922,
+      "mean_predicted_risk": 0.494,
+      "roc_auc": 0.7931,
+      "recall": 0.6863,
+      "precision": 0.743,
+      "ece": 0.0162,
+      "brier": 0.1845
+    },
+    "male": {
+      "patients": 4920,
+      "disease_rate": 0.5136,
+      "mean_predicted_risk": 0.5124,
+      "roc_auc": 0.8059,
+      "recall": 0.7107,
+      "precision": 0.7646,
+      "ece": 0.0143,
+      "brier": 0.1782
+    }
+  },
+  "by_age_band": {
+    "under 45": {
+      "patients": 2033,
+      "disease_rate": 0.304,
+      "mean_predicted_risk": 0.2921,
+      "roc_auc": 0.8366,
+      "recall": 0.5744,
+      "precision": 0.8199,
+      "ece": 0.017,
+      "brier": 0.1302
+    },
+    "45-49": {
+      "patients": 1793,
+      "disease_rate": 0.449,
+      "mean_predicted_risk": 0.4409,
+      "roc_auc": 0.7863,
+      "recall": 0.6112,
+      "precision": 0.7712,
+      "ece": 0.0383,
+      "brier": 0.1827
+    },
+    "50-54": {
+      "patients": 3732,
+      "disease_rate": 0.4582,
+      "mean_predicted_risk": 0.4568,
+      "roc_auc": 0.7865,
+      "recall": 0.6088,
+      "precision": 0.7769,
+      "ece": 0.0195,
+      "brier": 0.182
+    },
+    "55-59": {
+      "patients": 3254,
+      "disease_rate": 0.5519,
+      "mean_predicted_risk": 0.5552,
+      "roc_auc": 0.7504,
+      "recall": 0.6754,
+      "precision": 0.7488,
+      "ece": 0.0147,
+      "brier": 0.1998
+    },
+    "60 and over": {
+      "patients": 3188,
+      "disease_rate": 0.6484,
+      "mean_predicted_risk": 0.6622,
+      "roc_auc": 0.7153,
+      "recall": 0.8524,
+      "precision": 0.7204,
+      "ece": 0.0253,
+      "brier": 0.1978
+    }
+  },
+  "largest_gap": {
+    "sex": {
+      "roc_auc": 0.0128,
+      "recall": 0.0244,
+      "ece": 0.0019
+    },
+    "age_band": {
+      "roc_auc": 0.1213,
+      "recall": 0.278,
+      "ece": 0.0236
+    }
+  }
+}

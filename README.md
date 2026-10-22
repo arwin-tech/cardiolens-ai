@@ -41,6 +41,22 @@ Platt scaling was tested on a held-out half of the test set and only reduced the
   <img src="models/calibration_curve.png" alt="Calibration curve" width="45%">
 </p>
 
+## Fairness Check
+
+Does the model work equally well for everyone? On the same 14,000 test patients:
+
+| Group | Patients | ROC-AUC | Recall at the 50% cut-off | Calibration error |
+|---|---|---|---|---|
+| Women | 9,080 | 0.793 | 68.6% | 1.6% |
+| Men | 4,920 | 0.806 | 71.1% | 1.4% |
+| Under 45 | 2,033 | 0.837 | 57.4% | 1.7% |
+| 45–49 | 1,793 | 0.786 | 61.1% | 3.8% |
+| 50–54 | 3,732 | 0.786 | 60.9% | 1.9% |
+| 55–59 | 3,254 | 0.750 | 67.5% | 1.5% |
+| 60 and over | 3,188 | 0.715 | 85.2% | 2.5% |
+
+Women and men get almost identical performance. Age is where the model differs: the risk percentages stay well calibrated in every age band, but at the app's 50% cut-off it catches 57% of disease cases in patients under 45 versus 85% in patients 60 and over, because younger patients get lower scores overall. Separating sick from healthy patients also gets harder with age (ROC-AUC 0.84 down to 0.72). A real screening tool would need to choose its cut-off for the population it serves; this demo keeps 50%. To reproduce: `python src/fairness_check.py`.
+
 ## SQL Data Layer
 
 The `sql/` folder rebuilds the data preparation in SQL with DuckDB: a data-quality profile (it flags 1,321 physiologically impossible blood-pressure readings), cleaning and feature engineering, and disease rates by age band and blood-pressure category. The deployed model is unchanged. To run it: `pip install duckdb`, then `python train_from_sql.py`.
