@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PatientForm from '../components/PatientForm';
 import { PageBackdrop, PageHeader } from '../components/Backdrop';
-import { predictRisk, explainPrediction } from '../api/client';
+import { runAssessment } from '../lib/assess';
 import { PatientInput } from '../types/api';
 import { useBackendState } from '../context/BackendStatus';
 
@@ -17,12 +17,7 @@ export default function Analyze() {
     setLoading(true);
     setError(null);
     try {
-      const prediction = await predictRisk(data);
-      const explanation = await explainPrediction(data);
-
-      sessionStorage.setItem('lastPrediction', JSON.stringify(prediction));
-      sessionStorage.setItem('lastExplanation', JSON.stringify(explanation));
-
+      await runAssessment(data);
       navigate('/results');
     } catch (err: any) {
       setError(err.message || 'Failed to communicate with FastAPI server. Ensure backend is running.');

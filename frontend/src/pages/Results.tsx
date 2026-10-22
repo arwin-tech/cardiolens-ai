@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { Download, FileText, Upload } from 'lucide-react';
-import RiskGauge from '../components/RiskGauge';
+import RiskGauge, { EmptyDial } from '../components/RiskGauge';
 import SHAPChart from '../components/SHAPChart';
 import WhatIfComparison from '../components/WhatIfComparison';
 import { PageBackdrop, PageHeader } from '../components/Backdrop';
@@ -9,7 +8,9 @@ import { FramedPanel, OrnateButton, OrnateLink } from '../components/ornaments';
 import { batchPredict, runWhatIf } from '../api/client';
 import { useBackendState } from '../context/BackendStatus';
 import { formatFeatureValue } from '../lib/labels';
-import { BatchResponse, ExplainabilityResponse, PatientInput, PredictionResponse, WhatIfResponse } from '../types/api';
+import { EXAMPLES } from '../lib/examples';
+import { Assessment, readCachedAssessment, runAssessment } from '../lib/assess';
+import { BatchResponse, PatientInput, PredictionResponse, WhatIfResponse } from '../types/api';
 
 const BATCH_COLUMNS = ['age', 'gender', 'height', 'weight', 'ap_hi', 'ap_lo', 'cholesterol', 'gluc', 'smoke', 'alco', 'active'];
 
@@ -241,36 +242,101 @@ function ReportAndBatch({ patient, riskPercentage, category, bmi }: ReportProps)
 }
 
 // -----------------------------------------------------------------------------
+// Empty state: nothing scored in this tab yet
+// -----------------------------------------------------------------------------
+function EmptyResults({ onResult }: { onResult: (a: Assessment) => void }) {
+  const backend = useBackendState();
+  const [running, setRunning] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const runExample = async (label: string, data: PatientInput) => {
+    setRunning(label);
+    setError(null);
+    try {
+      onResult(await runAssessment(data));
+    } catch (e: any) {
+      setError(e?.message || 'Could not reach the model. Try again in a moment.');
+      setRunning(null);
+    }
+  };
+
+  return (
+    <div className="mx-auto max-w-3xl px-5">
+      <FramedPanel className="text-center" aria-labelledby="empty-title">
+        <EmptyDial />
+        <h2 id="empty-title" className="panel__title mt-6">
+          No assessment yet
+        </h2>
+        <p className="mx-auto mt-3 max-w-md text-stone">
+          Run an assessment and the risk score, the factors behind it and the what-if simulator will appear here.
+        </p>
+        <div className="mt-7 flex justify-center">
+          <OrnateLink to="/analyze" tone="crimson">
+            Run an assessment
+          </OrnateLink>
+        </div>
+
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-2.5">
+          <span className="mr-1 text-stone">Or see an example result:</span>
+          {EXAMPLES.map((ex) => (
+            <button
+              key={ex.label}
+              type="button"
+              className="chip"
+              disabled={running !== null}
+              onClick={() => runExample(ex.label, ex.data)}
+            >
+              <span className="chip__dot" style={{ background: ex.color }} aria-hidden="true" />
+              {running === ex.label ? 'Scoring…' : ex.label}
+            </button>
+          ))}
+        </div>
+
+        {running && backend !== 'online' && (
+          <p className="mt-5 text-[0.95rem] text-stone">
+            The free server is waking up, which can take up to a minute. Your result will appear here.
+          </p>
+        )}
+        {error && (
+          <p className="notice notice--error mt-6" role="alert">
+            {error}
+          </p>
+        )}
+      </FramedPanel>
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
 // Page
 // -----------------------------------------------------------------------------
+const defaultTargetBP = (p: PredictionResponse) => (p.patient_features.ap_hi > 120 ? 120 : p.patient_features.ap_hi - 10);
+
 export default function Results() {
-  const [prediction, setPrediction] = useState<PredictionResponse | null>(null);
-  const [explanation, setExplanation] = useState<ExplainabilityResponse | null>(null);
+  const [result, setResult] = useState<Assessment | null>(readCachedAssessment);
   const [whatIfData, setWhatIfData] = useState<WhatIfResponse | null>(null);
-  const [simulatedSysBP, setSimulatedSysBP] = useState<number>(120);
+  const [simulatedSysBP, setSimulatedSysBP] = useState<number>(() => (result ? defaultTargetBP(result.prediction) : 120));
   const [simLoading, setSimLoading] = useState(false);
   const [simError, setSimError] = useState<string | null>(null);
-  const navigate = useNavigate();
 
-  useEffect(() => {
-    const pCache = sessionStorage.getItem('lastPrediction');
-    const eCache = sessionStorage.getItem('lastExplanation');
+  const showResult = (a: Assessment) => {
+    setResult(a);
+    setWhatIfData(null);
+    setSimError(null);
+    setSimulatedSysBP(defaultTargetBP(a.prediction));
+  };
 
-    if (!pCache || !eCache) {
-      navigate('/analyze');
-      return;
-    }
+  if (!result) {
+    return (
+      <div className="page">
+        <PageBackdrop />
+        <PageHeader title="Patient assessment" />
+        <EmptyResults onResult={showResult} />
+      </div>
+    );
+  }
 
-    const parsedPred: PredictionResponse = JSON.parse(pCache);
-
-    setPrediction(parsedPred);
-    setExplanation(JSON.parse(eCache));
-
-    setSimulatedSysBP(parsedPred.patient_features.ap_hi > 120 ? 120 : parsedPred.patient_features.ap_hi - 10);
-  }, [navigate]);
-
-  if (!prediction || !explanation) return null;
-
+  const { prediction, explanation } = result;
   const patient = prediction.patient_features;
 
   const handleSimulate = async () => {
