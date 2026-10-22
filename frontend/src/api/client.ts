@@ -44,7 +44,7 @@ const PREDICTION_ENDPOINTS = {
  * 
  * @returns {Promise<{ok: boolean, status: string, modelLoaded: boolean, endpoint: string}>}
  */
-export async function healthCheck() {
+export async function healthCheck(timeoutMs = 15000) {
   const results = {
     ok: false,
     status: "offline",
@@ -58,15 +58,18 @@ export async function healthCheck() {
     try {
       console.debug(`🔍 Health check attempt: ${url}`);
 
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
       const response = await fetch(url, {
         method: "GET",
+        signal: controller.signal,
         credentials: "omit",
         headers: {
           "Accept": "application/json",
           "Content-Type": "application/json",
         },
         cache: "no-store",
-      });
+      }).finally(() => clearTimeout(timer));
 
       if (response.ok) {
         const data = await response.json();

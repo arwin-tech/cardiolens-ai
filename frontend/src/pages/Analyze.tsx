@@ -3,11 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import PatientForm from '../components/PatientForm';
 import { predictRisk, explainPrediction } from '../api/client';
 import { PatientInput } from '../types/api';
+import { useBackendState } from '../context/BackendStatus';
 
 export default function Analyze() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const backend = useBackendState();
+  const waking = backend !== 'online';
 
   const handleFormSubmit = async (data: PatientInput) => {
     setLoading(true);
@@ -34,13 +37,20 @@ export default function Analyze() {
         <p className="text-sm text-gray-600 mt-1">Enter patient clinical metrics below to execute model evaluation.</p>
       </div>
 
+      {waking && !error && (
+        <div className="p-4 bg-[#FFFBF8] border border-[#E8DFD9] text-gray-700 text-sm rounded-lg">
+          The demo runs on a free server that sleeps when idle, so it can take up to a minute to wake up.
+          You can fill in the form or pick an example now, and your result will appear as soon as it's ready.
+        </div>
+      )}
+
       {error && (
         <div className="p-4 bg-[#A84040]/10 border border-[#A84040] text-[#A84040] text-sm rounded-lg">
           {error}
         </div>
       )}
 
-      <PatientForm onSubmit={handleFormSubmit} loading={loading} />
+      <PatientForm onSubmit={handleFormSubmit} loading={loading} waking={waking} />
     </div>
   );
 }

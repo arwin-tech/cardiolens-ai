@@ -75,3 +75,22 @@ class TestCardioLensAPI:
         }
         response = client.post("/api/predict", json=invalid_patient)
         assert response.status_code == 422
+
+    def test_explain_returns_exact_shap_values(self, client):
+        """SHAP values plus the baseline must add up to the predicted risk (exact TreeSHAP)"""
+        import math
+        response = client.post("/api/explain", json=self.VALID_PATIENT)
+        assert response.status_code == 200
+        body = response.json()
+        logit = lambda p: math.log(p / (1 - p))
+        total = logit(body["base_value"]) + sum(f["shap_value"] for f in body["features"])
+        assert abs(total - logit(body["prediction_value"])) < 0.01
+
+    def test_explanations_differ_between_patients(self, client):
+        """Each patient gets their own explanation, not one global ranking"""
+        a = client.post("/api/explain", json=self.VALID_PATIENT).json()["features"]
+        b = client.post("/api/explain", json=self.VALID_PATIENT_2).json()["features"]
+        values_a = {f["feature"]: f["shap_value"] for f in a}
+        values_b = {f["feature"]: f["shap_value"] for f in b}
+        assert any(abs(abs(values_a[k]) - abs(values_b[k])) > 1e-3 for k in values_a)
+

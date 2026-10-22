@@ -6,10 +6,12 @@ import Home from './pages/Home';
 import Analyze from './pages/Analyze';
 import Results from './pages/Results';
 import About from './pages/About';
+import { BackendStatusProvider } from './context/BackendStatus';
 
 export default function App() {
   return (
     <Router>
+      <BackendStatusProvider>
       <div className="min-h-screen flex flex-col bg-[#F9F7F4] text-[#2C2C2C]">
         <Navbar />
         <main className="flex-1">
@@ -23,6 +25,7 @@ export default function App() {
         <Footer />
         <ServiceStatus />
       </div>
+      </BackendStatusProvider>
     </Router>
   );
 }

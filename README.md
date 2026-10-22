@@ -9,10 +9,12 @@ CardioLens AI predicts a person's risk of cardiovascular disease from 11 basic h
 > [!IMPORTANT]
 > This is a research and learning project, not a medical tool. Do not use it to diagnose or treat anyone.
 
+The backend runs on Render's free tier, which sleeps when idle, so the first request can take up to a minute. The app shows a "waking up" message while it starts, and one-click example patients let you try it straight away.
+
 ## Features
 
 - **Risk prediction:** enter patient details to get a risk percentage, a risk level (Low, Moderate, Elevated or High) and BMI
-- **Factor breakdown:** a chart showing which factors pushed the risk up or down
+- **Factor breakdown:** exact SHAP values for each patient (TreeSHAP, computed by XGBoost), showing which factors pushed their risk up or down
 - **What-if simulator:** change the blood pressure and see how the risk changes
 - **Report download:** save a plain-text summary of the assessment
 - **Batch scoring:** send a CSV of many patients to the API and get a risk score for each
@@ -25,6 +27,16 @@ SHAP analysis shows that systolic blood pressure is by far the biggest factor in
 
 <p align="center">
   <img src="explainability/shap_bar.png" alt="SHAP feature importance" width="60%">
+</p>
+
+## Calibration
+
+The risk percentages are well calibrated. On the 14,000 test patients, the expected calibration error is 1.5% and the Brier score is 0.182, so a predicted 30% risk means roughly 30% of similar patients had the disease. The one weak spot is the very top: patients predicted at around 92% had an 85% disease rate, so very high scores are best read as "high" rather than exact.
+
+Platt scaling was tested on a held-out half of the test set and only reduced the calibration error from 1.8% to 1.2%, so it isn't deployed. To reproduce: `python src/evaluate_calibration.py`.
+
+<p align="center">
+  <img src="models/calibration_curve.png" alt="Calibration curve" width="45%">
 </p>
 
 ## SQL Data Layer

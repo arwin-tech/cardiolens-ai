@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 import joblib
 import numpy as np
 import pandas as pd
+import xgboost as xgb
 from fastapi import FastAPI, File, HTTPException, UploadFile, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
@@ -245,75 +246,71 @@ class ModelManager:
 # ============================================================================
 
 class SHAPExplainer:
-    """Generates feature importance explanations using SHAP-like approach"""
-    
+    """Exact per-patient SHAP values (TreeSHAP), computed natively by XGBoost.
+
+    XGBoost's pred_contribs gives the same values as shap.TreeExplainer without importing
+    the shap library at runtime. Values are in log-odds; together with the baseline they
+    add up exactly to the model's prediction for this patient.
+    """
+
+    FEATURE_NAMES = [
+        "age", "gender", "height", "weight", "ap_hi", "ap_lo",
+        "cholesterol", "gluc", "smoke", "alco", "active"
+    ]
+
     def __init__(self, model_manager: ModelManager):
         self.model_manager = model_manager
 
-    def explain(self, patient: PatientInput) -> Dict[str, Any]:
-        """Generate SHAP-based explanation for prediction"""
-        if not self.model_manager or self.model_manager.model is None:
-            raise RuntimeError("Model not initialized")
-
-        features = [
-            float(patient.age), float(patient.gender), float(patient.height),
-            float(patient.weight), float(patient.ap_hi), float(patient.ap_lo),
-            float(patient.cholesterol), float(patient.gluc), float(patient.smoke),
-            float(patient.alco), float(patient.active)
-        ]
-        feature_names = [
-            "age", "gender", "height", "weight", "ap_hi", "ap_lo",
-            "cholesterol", "gluc", "smoke", "alco", "active"
-        ]
-
-        # Extract base model from pipeline if needed
+    def _raw_model(self):
         model_obj = self.model_manager.model
         if hasattr(model_obj, "named_steps"):
-            raw_model = (
+            return (
                 model_obj.named_steps.get("model")
                 or model_obj.named_steps.get("classifier")
                 or model_obj.steps[-1][1]
             )
-        else:
-            raw_model = model_obj
+        return model_obj
 
-        # Get feature importances or use defaults
-        importances = getattr(
-            raw_model,
-            "feature_importances_",
-            np.array([0.15, 0.02, 0.03, 0.08, 0.30, 0.20, 0.12, 0.04, 0.02, 0.01, 0.03])
-        )
-        
-        baselines = [53.0, 1.0, 165.0, 72.0, 128.0, 96.0, 1.0, 1.0, 0.0, 0.0, 1.0]
+    def explain(self, patient: PatientInput) -> Dict[str, Any]:
+        """Return this patient's SHAP values, ranked by absolute impact"""
+        if not self.model_manager or self.model_manager.model is None:
+            raise RuntimeError("Model not initialized")
 
-        # Generate explanations
-        explanations = []
-        for idx, (name, val, imp, base) in enumerate(zip(
-            feature_names, features, importances, baselines
-        )):
-            direction = 1.0 if val >= base else -1.0
-            shap_val = float(imp * direction)
-            explanations.append({
+        raw_model = self._raw_model()
+        if not hasattr(raw_model, "get_booster"):
+            raise RuntimeError("SHAP explanations require the XGBoost model")
+
+        X = pd.DataFrame([[
+            float(patient.age), float(patient.gender), float(patient.height),
+            float(patient.weight), float(patient.ap_hi), float(patient.ap_lo),
+            float(patient.cholesterol), float(patient.gluc), float(patient.smoke),
+            float(patient.alco), float(patient.active)
+        ]], columns=self.FEATURE_NAMES)
+
+        contribs = raw_model.get_booster().predict(xgb.DMatrix(X), pred_contribs=True)[0]
+        shap_values, bias = contribs[:-1], float(contribs[-1])
+
+        explanations = [
+            {
                 "feature": name,
-                "value": float(val),
-                "shap_value": round(shap_val, 4),
-                "impact": "positive" if shap_val > 0 else "negative",
-                "feature_rank": idx + 1
-            })
-
-        # Sort by absolute SHAP value
+                "value": float(value),
+                "shap_value": round(float(sv), 4),
+                "impact": "positive" if sv > 0 else "negative",
+                "feature_rank": 0,
+            }
+            for name, value, sv in zip(self.FEATURE_NAMES, X.iloc[0], shap_values)
+        ]
         explanations.sort(key=lambda x: abs(x["shap_value"]), reverse=True)
         for idx, exp in enumerate(explanations):
             exp["feature_rank"] = idx + 1
 
-        # Get prediction value
         prediction = self.model_manager.predict(patient)
 
         return {
             "features": explanations,
-            "base_value": 0.5,
+            "base_value": round(float(1.0 / (1.0 + np.exp(-bias))), 4),
             "prediction_value": prediction["risk_probability"],
-            "disclaimer": "This explanation is model-based and is not a medical diagnosis."
+            "disclaimer": "SHAP values (log-odds) explain this model's prediction for this patient. Not a medical diagnosis."
         }
 
 
@@ -499,8 +496,8 @@ async def execute_what_if(request: WhatIfRequest):
         mod_clean = {k: v for k, v in request.modified.items() if k in allowed}
 
         # Convert to DataFrames
-        orig_df = pd.DataFrame([orig_clean])
-        mod_df = pd.DataFrame([mod_clean])
+        orig_df = pd.DataFrame([orig_clean]).reindex(columns=allowed)
+        mod_df = pd.DataFrame([mod_clean]).reindex(columns=allowed)
 
         # Generate predictions
         orig_prob = float(model_manager.model.predict_proba(orig_df)[0][1])

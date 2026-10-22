@@ -4,9 +4,17 @@ import { PatientInput } from '../types/api';
 interface Props {
   onSubmit: (data: PatientInput) => void;
   loading: boolean;
+  waking?: boolean;
 }
 
-export default function PatientForm({ onSubmit, loading }: Props) {
+// Example patients across the risk range (model output: about 13%, 47% and 91%)
+const EXAMPLES: { label: string; data: PatientInput }[] = [
+  { label: 'Low-risk example', data: { age: 34, gender: 1, height: 168, weight: 60, ap_hi: 115, ap_lo: 75, cholesterol: 1, gluc: 1, smoke: 0, alco: 0, active: 1 } },
+  { label: 'Moderate example', data: { age: 53, gender: 2, height: 176, weight: 84, ap_hi: 135, ap_lo: 85, cholesterol: 1, gluc: 1, smoke: 1, alco: 0, active: 1 } },
+  { label: 'High-risk example', data: { age: 61, gender: 2, height: 172, weight: 98, ap_hi: 165, ap_lo: 100, cholesterol: 3, gluc: 2, smoke: 1, alco: 0, active: 0 } },
+];
+
+export default function PatientForm({ onSubmit, loading, waking = false }: Props) {
   const [formData, setFormData] = useState<PatientInput>({
     age: 52,
     gender: 1,
@@ -34,6 +42,21 @@ export default function PatientForm({ onSubmit, loading }: Props) {
   return (
     <form onSubmit={handleSubmit} className="bg-[#FFFBF8] border border-[#E8DFD9] p-8 rounded-medical shadow-sm space-y-6">
       <h3 className="text-xl font-bold text-[#8B2D2D] border-b border-[#E8DFD9] pb-3">Patient Clinical Input Parameters</h3>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold uppercase text-gray-500">Try an example:</span>
+        {EXAMPLES.map((ex) => (
+          <button
+            key={ex.label}
+            type="button"
+            disabled={loading}
+            onClick={() => { setFormData(ex.data); onSubmit(ex.data); }}
+            className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#E8DFD9] bg-white text-[#8B2D2D] hover:border-[#8B2D2D] disabled:opacity-50"
+          >
+            {ex.label}
+          </button>
+        ))}
+      </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
@@ -117,7 +140,7 @@ export default function PatientForm({ onSubmit, loading }: Props) {
         disabled={loading}
         className="w-full py-3 bg-[#8B2D2D] hover:bg-[#722323] text-white font-semibold rounded-medical transition-all shadow-sm disabled:opacity-50"
       >
-        {loading ? 'Executing Risk Prediction...' : 'Evaluate Risk Score'}
+        {loading ? (waking ? 'Waking up the model (up to a minute)...' : 'Executing Risk Prediction...') : 'Evaluate Risk Score'}
       </button>
     </form>
   );

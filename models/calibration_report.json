@@ -1,0 +1,29 @@
+{
+  "test_patients": 14000,
+  "deployed_model": {
+    "brier": 0.1823,
+    "ece": 0.0154,
+    "log_loss": 0.5463,
+    "roc_auc": 0.7978
+  },
+  "recalibration_check_on_held_out_half": {
+    "raw_model": {
+      "brier": 0.1858,
+      "ece": 0.0182,
+      "log_loss": 0.5545,
+      "roc_auc": 0.7912
+    },
+    "platt_scaling": {
+      "brier": 0.1856,
+      "ece": 0.0118,
+      "log_loss": 0.5535,
+      "roc_auc": 0.7912
+    },
+    "isotonic_regression": {
+      "brier": 0.1862,
+      "ece": 0.0205,
+      "log_loss": 0.5543,
+      "roc_auc": 0.7903
+    }
+  }
+}
