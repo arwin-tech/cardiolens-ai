@@ -188,9 +188,27 @@ function ReportAndBatch({ patient, riskPercentage, category, bmi }: ReportProps)
           {batchResult && (
             <div className="space-y-4">
               <p className="text-parchment">
-                Scored {batchResult.total_records} patients. {batchResult.high_risk_count} have a predicted risk of 50% or
-                higher.
+                Scored {batchResult.scored_records} of {batchResult.total_records} patients.{' '}
+                {batchResult.high_risk_count} {batchResult.high_risk_count === 1 ? 'has' : 'have'} a predicted risk of 50% or higher.
               </p>
+              {batchResult.skipped_records > 0 && (
+                <div className="notice">
+                  <p>
+                    {batchResult.skipped_records} {batchResult.skipped_records === 1 ? 'row was' : 'rows were'} skipped
+                    because they failed the same checks as the form:
+                  </p>
+                  <ul className="mt-2 list-disc space-y-0.5 pl-5 text-[0.95rem] text-stone">
+                    {batchResult.skipped.slice(0, 5).map((s) => (
+                      <li key={s.line}>
+                        Line {s.line}: {s.reason}
+                      </li>
+                    ))}
+                  </ul>
+                  {batchResult.skipped_records > 5 && (
+                    <p className="mt-1 text-[0.95rem] text-stone-2">and {batchResult.skipped_records - 5} more.</p>
+                  )}
+                </div>
+              )}
               <div className="overflow-x-auto">
                 <table className="data-table">
                   <thead>
@@ -222,7 +240,7 @@ function ReportAndBatch({ patient, riskPercentage, category, bmi }: ReportProps)
                   </tbody>
                 </table>
               </div>
-              {batchResult.total_records > preview.length && (
+              {batchResult.scored_records > preview.length && (
                 <p className="text-[0.95rem] text-stone-2">Showing the first {preview.length} rows.</p>
               )}
               <OrnateButton
@@ -315,6 +333,7 @@ const defaultTargetBP = (p: PredictionResponse) => (p.patient_features.ap_hi > 1
 export default function Results() {
   const [result, setResult] = useState<Assessment | null>(readCachedAssessment);
   const [whatIfData, setWhatIfData] = useState<WhatIfResponse | null>(null);
+  const [whatIfDiastolic, setWhatIfDiastolic] = useState<{ from: number; to: number } | undefined>();
   const [simulatedSysBP, setSimulatedSysBP] = useState<number>(() => (result ? defaultTargetBP(result.prediction) : 120));
   const [simLoading, setSimLoading] = useState(false);
   const [simError, setSimError] = useState<string | null>(null);
@@ -343,7 +362,8 @@ export default function Results() {
     const modifiedFeatures = {
       ...patient,
       ap_hi: simulatedSysBP,
-      ap_lo: Math.min(patient.ap_lo, 80),
+      // keep diastolic below the new systolic so the change stays physiologically valid
+      ap_lo: Math.min(patient.ap_lo, 80, simulatedSysBP - 1),
     };
 
     setSimLoading(true);
@@ -351,6 +371,7 @@ export default function Results() {
     try {
       const res = await runWhatIf(patient, modifiedFeatures);
       setWhatIfData(res);
+      setWhatIfDiastolic({ from: patient.ap_lo, to: modifiedFeatures.ap_lo });
     } catch (e: any) {
       setSimError(e?.message || 'The simulation failed. Try again in a moment.');
     } finally {
@@ -445,7 +466,7 @@ export default function Results() {
             </p>
           )}
 
-          <WhatIfComparison data={whatIfData} />
+          <WhatIfComparison data={whatIfData} diastolic={whatIfDiastolic} />
         </FramedPanel>
 
         <ReportAndBatch

@@ -1,9 +1,11 @@
+# Training and analysis scripts (src/, train_from_sql.py).
+# The API has its own list in backend/requirements.txt.
 numpy
 pandas
-scikit-learn
-xgboost
+scikit-learn==1.6.1
+xgboost==2.1.4
+joblib
 shap
-streamlit
 matplotlib
 seaborn
 duckdb

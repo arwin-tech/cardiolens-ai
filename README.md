@@ -1,5 +1,7 @@
 # CardioLens AI
 
+[![CI](https://github.com/arwin-tech/cardiolens-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/arwin-tech/cardiolens-ai/actions/workflows/ci.yml)
+
 **Explainable cardiovascular disease risk prediction**
 
 CardioLens AI predicts a person's risk of cardiovascular disease from 11 basic health details, like age, blood pressure, cholesterol and smoking, and shows which factors raised or lowered that risk.
@@ -17,7 +19,7 @@ The backend runs on Render's free tier, which sleeps when idle, so the first req
 - **Factor breakdown:** exact SHAP values for each patient (TreeSHAP, computed by XGBoost), showing which factors pushed their risk up or down
 - **What-if simulator:** change the blood pressure and see how the risk changes
 - **Report download:** save a plain-text summary of the assessment
-- **Batch scoring:** send a CSV of many patients to the API and get a risk score for each
+- **Batch scoring:** upload a CSV of up to 5,000 patients and get a risk score for each. Every row is checked with the same rules as the form, and rows that fail are skipped with the reason
 
 ## How It Works
 
@@ -48,6 +50,7 @@ The `sql/` folder rebuilds the data preparation in SQL with DuckDB: a data-quali
 - **ML:** Python, XGBoost, scikit-learn, SHAP, SQL (DuckDB)
 - **Backend:** FastAPI, hosted on Render
 - **Frontend:** React, TypeScript, Vite, Tailwind CSS, Recharts, hosted on Vercel
+- **Engineering:** pytest (25 API tests), GitHub Actions CI on every push, Docker image for the API
 
 ## Run Locally
 
@@ -75,6 +78,20 @@ npm run dev
 ```
 
 Then open http://localhost:5173.
+
+**Or run the API with Docker**
+
+```bash
+docker build -t cardiolens-api backend
+docker run -p 8000:8000 cardiolens-api
+```
+
+**Run the tests**
+
+```bash
+pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+python -m pytest backend -v
+```
 
 ## Project Structure
 

@@ -47,12 +47,16 @@ export interface WhatIfResponse {
 
 export interface BatchResponse {
   total_records: number;
+  scored_records: number;
+  skipped_records: number;
   high_risk_count: number;
   results: Array<Record<string, string | number | boolean | null>>;
+  skipped: { line: number; reason: string }[];
 }
 
 export interface HealthResponse {
   status: string;
+  service: string;
   model_loaded: boolean;
-  timestamp: string;
+  version: string;
 }

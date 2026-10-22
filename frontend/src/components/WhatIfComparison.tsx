@@ -1,6 +1,12 @@
 import { WhatIfResponse } from '../types/api';
 
-export default function WhatIfComparison({ data }: { data: WhatIfResponse | null }) {
+export default function WhatIfComparison({
+  data,
+  diastolic,
+}: {
+  data: WhatIfResponse | null;
+  diastolic?: { from: number; to: number };
+}) {
   if (!data) return null;
 
   const { original_risk: origRisk, simulated_risk: simRisk } = data;
@@ -28,8 +34,17 @@ export default function WhatIfComparison({ data }: { data: WhatIfResponse | null
         </div>
       </div>
       <p className="text-stone">
-        Systolic blood pressure changed from <strong className="font-medium text-parchment">{data.original_ap_hi} mmHg</strong> to{' '}
-        <strong className="font-medium text-parchment">{data.target_ap_hi} mmHg</strong>, with diastolic pressure capped at 80 mmHg.
+        Blood pressure changed from{' '}
+        <strong className="font-medium text-parchment">
+          {data.original_ap_hi}
+          {diastolic ? `/${diastolic.from}` : ''} mmHg
+        </strong>{' '}
+        to{' '}
+        <strong className="font-medium text-parchment">
+          {data.target_ap_hi}
+          {diastolic ? `/${diastolic.to}` : ''} mmHg
+        </strong>
+        .
       </p>
     </div>
   );

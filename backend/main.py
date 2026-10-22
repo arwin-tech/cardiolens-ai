@@ -1,25 +1,25 @@
 """
-CardioLens AI Backend - Production v2.1.0
-Fixed CORS configuration, dual health endpoints, and error handling
+CardioLens AI Backend v2.1.0
+
+FastAPI service that scores cardiovascular risk with an XGBoost model and
+explains each prediction with exact per-patient SHAP values.
 """
 
 import io
 import json
 import logging
 import os
-import re
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import joblib
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-from fastapi import FastAPI, File, HTTPException, UploadFile, status, Request
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 # ============================================================================
 # LOGGING CONFIGURATION
@@ -52,9 +52,16 @@ logger.info(f"Metadata path: {METADATA_PATH}")
 # Parse allowed origins from environment
 ALLOWED_ORIGINS_STR = os.getenv(
     "ALLOWED_ORIGINS",
-    "http://localhost:5173,http://localhost:3000,https://cardiolens-ai-za8w.onrender.com"
+    "https://cardiolens-ai.vercel.app,http://localhost:5173,http://localhost:4173,http://localhost:3000"
 )
 ALLOWED_ORIGINS = [o.strip() for o in ALLOWED_ORIGINS_STR.split(",") if o.strip()]
+# This project's Vercel preview deployments (not every *.vercel.app site) and local dev servers
+ALLOWED_ORIGIN_REGEX = r"https://cardiolens-ai(-[a-z0-9-]+)?\.vercel\.app|http://localhost:\d+"
+
+VERSION = "2.1.0"
+FEATURES = ["age", "gender", "height", "weight", "ap_hi", "ap_lo", "cholesterol", "gluc", "smoke", "alco", "active"]
+MAX_UPLOAD_BYTES = 2_000_000   # batch CSV size limit (protects the small free-tier server)
+MAX_BATCH_ROWS = 5_000
 
 logger.info(f"CORS Allowed Origins: {ALLOWED_ORIGINS}")
 
@@ -116,9 +123,10 @@ class ExplainabilityResponse(BaseModel):
 
 
 class WhatIfRequest(BaseModel):
-    """Counterfactual scenario request"""
-    original: Dict[str, Any]
-    modified: Dict[str, Any]
+    """Counterfactual scenario: the same patient before and after a change.
+    Both go through the full PatientInput validation."""
+    original: PatientInput
+    modified: PatientInput
 
 
 class HealthResponse(BaseModel):
@@ -222,23 +230,6 @@ class ModelManager:
             "bmi": bmi,
             "features_array": features[0].tolist()
         }
-
-    def predict_batch(self, df: pd.DataFrame) -> List[float]:
-        """Generate bulk predictions from DataFrame"""
-        if not self.is_loaded or self.model is None:
-            raise RuntimeError("Model not loaded")
-
-        required_features = [
-            "age", "gender", "height", "weight", "ap_hi", "ap_lo",
-            "cholesterol", "gluc", "smoke", "alco", "active"
-        ]
-        missing = [f for f in required_features if f not in df.columns]
-        if missing:
-            raise ValueError(f"Missing required columns: {', '.join(missing)}")
-
-        features = df[required_features].astype(float)
-        predictions = self.model.predict_proba(features.values)[:, 1]
-        return [float(v) for v in predictions]
 
 
 # ============================================================================
@@ -360,9 +351,9 @@ app = FastAPI(
 # ============================================================================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,  # ✅ Use explicit list (not wildcard)
-    allow_origin_regex=r"https://.*\.vercel\.app|http://localhost:\d+",  # ✅ Regex for Vercel previews
-    allow_credentials=True,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=ALLOWED_ORIGIN_REGEX,
+    allow_credentials=False,  # the API is stateless: no cookies or auth headers
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
     max_age=3600,  # Cache preflight responses
@@ -379,7 +370,7 @@ async def root():
     """Root endpoint with service information"""
     return {
         "service": "CardioLens AI API",
-        "version": "2.1.0",
+        "version": VERSION,
         "status": "online",
         "endpoints": {
             "health": "/api/health (may be blocked by ad-blockers)",
@@ -395,43 +386,15 @@ async def root():
 
 
 @app.get("/api/health", response_model=HealthResponse)
-async def health_check():
-    """
-    Standard health check endpoint.
-    Note: This endpoint may be blocked by browser ad-blockers.
-    Use /api/status as a fallback.
-    """
-    return HealthResponse(
-        status="healthy" if model_manager.is_loaded else "degraded",
-        service="CardioLens AI API",
-        model_loaded=model_manager.is_loaded,
-        version="2.1.0"
-    )
-
-
 @app.get("/api/status", response_model=HealthResponse)
-async def status_check():
-    """
-    Alternative health endpoint (bypasses ad-blockers).
-    Recommended endpoint for frontend health checks.
-    """
+@app.get("/health", response_model=HealthResponse, include_in_schema=False)
+async def health_check():
+    """Service health. /api/status is the same check under a URL ad-blockers don't block."""
     return HealthResponse(
         status="healthy" if model_manager.is_loaded else "degraded",
         service="CardioLens AI API",
         model_loaded=model_manager.is_loaded,
-        version="2.1.0"
-    )
-
-
-# Legacy alias for backward compatibility
-@app.get("/health", response_model=HealthResponse)
-async def legacy_health():
-    """Backward compatibility alias for /api/health"""
-    return HealthResponse(
-        status="healthy" if model_manager.is_loaded else "degraded",
-        service="CardioLens AI API",
-        model_loaded=model_manager.is_loaded,
-        version="2.1.0"
+        version=VERSION,
     )
 
 
@@ -457,7 +420,7 @@ async def predict(patient: PatientInput):
         )
     except Exception as e:
         logger.error(f"Prediction error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Prediction failed")
 
 
 @app.post("/api/explain", response_model=ExplainabilityResponse)
@@ -473,100 +436,113 @@ async def explain(patient: PatientInput):
         return shap_explainer.explain(patient)
     except Exception as e:
         logger.error(f"Explanation error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Explanation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Explanation failed")
 
 
 @app.post("/api/what-if")
 async def execute_what_if(request: WhatIfRequest):
-    """Generate counterfactual risk comparison"""
+    """Compare the predicted risk for a patient before and after a change."""
     if not model_manager.is_loaded:
-        raise HTTPException(
-            status_code=503,
-            detail="Model service unavailable"
-        )
-    
+        raise HTTPException(status_code=503, detail="Model service unavailable")
+
     try:
-        allowed = [
-            "age", "gender", "height", "weight", "ap_hi", "ap_lo",
-            "cholesterol", "gluc", "smoke", "alco", "active"
-        ]
-        
-        # Sanitize inputs
-        orig_clean = {k: v for k, v in request.original.items() if k in allowed}
-        mod_clean = {k: v for k, v in request.modified.items() if k in allowed}
-
-        # Convert to DataFrames
-        orig_df = pd.DataFrame([orig_clean]).reindex(columns=allowed)
-        mod_df = pd.DataFrame([mod_clean]).reindex(columns=allowed)
-
-        # Generate predictions
-        orig_prob = float(model_manager.model.predict_proba(orig_df)[0][1])
-        mod_prob = float(model_manager.model.predict_proba(mod_df)[0][1])
-
-        # Calculate deltas
-        orig_pct = round(orig_prob * 100, 1)
-        sim_pct = round(mod_prob * 100, 1)
-
-        return {
-            "original_risk": orig_pct,
-            "simulated_risk": sim_pct,
-            "risk_delta": round(sim_pct - orig_pct, 1),
-            "original_ap_hi": orig_clean.get("ap_hi"),
-            "target_ap_hi": mod_clean.get("ap_hi"),
-        }
+        orig_pct = round(model_manager.predict(request.original)["risk_percentage"], 1)
+        sim_pct = round(model_manager.predict(request.modified)["risk_percentage"], 1)
     except Exception as e:
-        logger.error(f"What-If execution error: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Counterfactual calculation error: {str(e)}"
-        )
+        logger.error(f"What-if error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Counterfactual calculation failed")
+
+    return {
+        "original_risk": orig_pct,
+        "simulated_risk": sim_pct,
+        "risk_delta": round(sim_pct - orig_pct, 1),
+        "original_ap_hi": request.original.ap_hi,
+        "target_ap_hi": request.modified.ap_hi,
+    }
+
+
+def _describe_row_error(err: ValidationError, values: Dict[str, Any]) -> str:
+    """Turn a Pydantic error for one CSV row into a short, readable reason."""
+    first = err.errors()[0]
+    field = str(first["loc"][0]) if first.get("loc") else ""
+    if field == "age" and values.get("age", 0) > 1000:
+        return "age looks like it is in days; use years (18-100)"
+    message = first["msg"].replace("Value error, ", "")
+    return f"{field}: {message}" if field else message
 
 
 @app.post("/api/batch-predict")
 async def batch_predict(file: UploadFile = File(...)):
-    """Process bulk predictions from CSV file"""
+    """Score many patients from a CSV file.
+
+    Every row goes through the same validation as /api/predict. Rows that fail it
+    are not scored; they are listed in `skipped` with the reason.
+    """
     if not model_manager.is_loaded:
-        raise HTTPException(
-            status_code=503,
-            detail="Model service unavailable"
-        )
-    
+        raise HTTPException(status_code=503, detail="Model service unavailable")
     if not file.filename or not file.filename.lower().endswith(".csv"):
-        raise HTTPException(
-            status_code=400,
-            detail="Please upload a CSV file"
-        )
+        raise HTTPException(status_code=400, detail="Please upload a CSV file")
+
+    contents = await file.read(MAX_UPLOAD_BYTES + 1)
+    if not contents:
+        raise HTTPException(status_code=400, detail="Uploaded CSV file is empty")
+    if len(contents) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"File is too large. The limit is {MAX_UPLOAD_BYTES // 1_000_000} MB.")
 
     try:
-        contents = await file.read()
-        if not contents:
-            raise HTTPException(
-                status_code=400,
-                detail="Uploaded CSV file is empty"
-            )
+        # sep=None detects the delimiter, so comma- and semicolon-separated files both work
+        df = pd.read_csv(io.BytesIO(contents), sep=None, engine="python")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Could not read the file as CSV")
+    df.columns = [str(c).strip().lower() for c in df.columns]
 
-        df = pd.read_csv(io.BytesIO(contents))
-        if df.empty:
-            raise HTTPException(
-                status_code=400,
-                detail="Uploaded CSV contains no records"
-            )
+    if df.empty:
+        raise HTTPException(status_code=400, detail="Uploaded CSV contains no records")
+    if len(df) > MAX_BATCH_ROWS:
+        raise HTTPException(status_code=400, detail=f"Too many rows ({len(df):,}). The limit is {MAX_BATCH_ROWS:,} per file.")
+    missing = [f for f in FEATURES if f not in df.columns]
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Missing required columns: {', '.join(missing)}")
 
-        # Generate predictions
-        predictions = model_manager.predict_batch(df)
-        df["risk_score"] = predictions
-        df["high_risk"] = df["risk_score"] >= 0.50
+    numeric = df[FEATURES].apply(pd.to_numeric, errors="coerce")
+    valid_index: List[Any] = []
+    patients: List[PatientInput] = []
+    skipped: List[Dict[str, Any]] = []
+    for idx, values in zip(df.index, numeric.to_dict(orient="records")):
+        line = int(idx) + 2  # line 1 is the header
+        blank = [k for k, v in values.items() if pd.isna(v)]
+        if blank:
+            skipped.append({"line": line, "reason": f"{blank[0]}: missing or not a number"})
+            continue
+        try:
+            patients.append(PatientInput(**values))
+            valid_index.append(idx)
+        except ValidationError as err:
+            skipped.append({"line": line, "reason": _describe_row_error(err, values)})
 
-        return {
-            "total_records": len(df),
-            "high_risk_count": int(df["high_risk"].sum()),
-            "results": df.to_dict(orient="records"),
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Batch prediction error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Batch prediction failed: {str(e)}")
+    results: List[Dict[str, Any]] = []
+    if patients:
+        try:
+            X = np.array([[getattr(p, f) for f in FEATURES] for p in patients], dtype=float)
+            probabilities = model_manager.model.predict_proba(X)[:, 1]
+        except Exception as e:
+            logger.error(f"Batch prediction error: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Batch prediction failed")
+        rows = df.loc[valid_index]
+        rows = rows.astype(object).where(rows.notna(), None)  # blank extra columns -> null, never NaN
+        for row, p in zip(rows.to_dict(orient="records"), probabilities):
+            row["risk_score"] = round(float(p), 4)
+            row["high_risk"] = bool(p >= 0.5)
+            results.append(row)
+
+    return {
+        "total_records": int(len(df)),
+        "scored_records": len(results),
+        "skipped_records": len(skipped),
+        "high_risk_count": sum(r["high_risk"] for r in results),
+        "results": results,
+        "skipped": skipped[:50],
+    }
 
 
 # ============================================================================
