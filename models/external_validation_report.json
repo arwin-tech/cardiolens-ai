@@ -1,0 +1,75 @@
+{
+  "dataset": "NHANES 2013-2014 (US CDC, public domain)",
+  "cohort_steps": {
+    "NHANES 2013-2014 participants": 10175,
+    "aged 30-65 (training age range)": 3589,
+    "not pregnant": 3567,
+    "all 11 inputs and the outcome recorded": 2916,
+    "passed the API's input checks": 2916
+  },
+  "patients": 2916,
+  "cvd_cases": 200,
+  "cvd_rate": 0.0686,
+  "roc_auc": 0.6314,
+  "roc_auc_95ci": [
+    0.5949,
+    0.6663
+  ],
+  "roc_auc_age_alone": 0.6964,
+  "roc_auc_age_alone_95ci": [
+    0.661,
+    0.7309
+  ],
+  "roc_auc_by_sex": {
+    "female": 0.6253,
+    "male": 0.6346
+  },
+  "at_threshold_0_5": {
+    "flagged_share": 0.344,
+    "recall": 0.505,
+    "precision": 0.1007
+  },
+  "calibration_as_deployed": {
+    "mean_predicted_risk": 0.3899,
+    "observed_rate": 0.0686,
+    "ece": 0.3213,
+    "brier": 0.2257
+  },
+  "calibration_after_recalibration_on_other_half": {
+    "mean_predicted_risk": 0.078,
+    "observed_rate": 0.0597,
+    "ece": 0.0183,
+    "brier": 0.0557
+  },
+  "sensitivity_alcohol_set_to_no": {
+    "roc_auc": 0.6273
+  },
+  "why": {
+    "systolic_bp_alone_roc_auc": {
+      "training_data_test_set": 0.7508,
+      "nhanes": 0.5489
+    },
+    "share_on_bp_or_lipid_medication": {
+      "everyone": 0.2956,
+      "people_with_cvd": 0.665
+    },
+    "by_medication": {
+      "untreated": {
+        "patients": 2054,
+        "cvd_cases": 67,
+        "roc_auc": 0.603,
+        "roc_auc_age_alone": 0.6415
+      },
+      "on_medication": {
+        "patients": 862,
+        "cvd_cases": 133,
+        "roc_auc": 0.5431,
+        "roc_auc_age_alone": 0.6036
+      }
+    }
+  },
+  "for_comparison_internal_test_set": {
+    "roc_auc": 0.7978,
+    "cvd_rate": 0.5
+  }
+}

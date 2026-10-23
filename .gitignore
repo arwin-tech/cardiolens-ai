@@ -26,3 +26,5 @@ build/
 .idea/
 .DS_Store
 Thumbs.db
+# Downloaded external datasets (re-created by src/external_validation.py)
+data/external/

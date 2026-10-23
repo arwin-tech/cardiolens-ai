@@ -125,6 +125,27 @@ export default function About() {
           <p className="mt-4 text-[0.95rem] text-stone-2">From src/fairness_check.py, on the same 14,000 test patients.</p>
         </FramedPanel>
 
+        <FramedPanel corners={false} aria-labelledby="about-external">
+          <h2 id="about-external" className="panel__title">
+            Tested on a different population
+          </h2>
+          <div className="rule" />
+          <div className="space-y-3 leading-relaxed text-stone">
+            <p>
+              The model was also tested, unchanged, on 2,916 US adults from NHANES 2013–2014, the CDC’s national
+              health survey. It does not transfer well: ROC-AUC fell from 0.798 to 0.631, and ranking people by age alone
+              (0.696) did better. Its percentages were also far too high there (average 39% predicted
+              against 6.9% actual), because half the training patients had heart disease.
+            </p>
+            <p>
+              The main reason is blood pressure, the model’s strongest input, which barely separates sick from healthy
+              people in NHANES, partly because most people already diagnosed take blood-pressure or cholesterol
+              medication. So the scores are only meaningful for populations like the training data.
+            </p>
+          </div>
+          <p className="mt-4 text-[0.95rem] text-stone-2">From src/external_validation.py.</p>
+        </FramedPanel>
+
         <div className="notice text-center">
           A research and learning project, not a medical device. Do not use it to diagnose or treat anyone.
         </div>

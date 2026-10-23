@@ -57,6 +57,19 @@ Does the model work equally well for everyone? On the same 14,000 test patients:
 
 Women and men get almost identical performance. Age is where the model differs: the risk percentages stay well calibrated in every age band, but at the app's 50% cut-off it catches 57% of disease cases in patients under 45 versus 85% in patients 60 and over, because younger patients get lower scores overall. Separating sick from healthy patients also gets harder with age (ROC-AUC 0.84 down to 0.72). A real screening tool would need to choose its cut-off for the population it serves; this demo keeps 50%. To reproduce: `python src/fairness_check.py`.
 
+## External Validation
+
+To see whether the model works outside its training data, it was tested, unchanged, on 2,916 US adults aged 30–65 from NHANES 2013–2014, the US national health survey run by the CDC (public domain). The 11 inputs were mapped from NHANES measurements, and "heart disease" means a doctor had diagnosed coronary heart disease, angina, a heart attack, heart failure or a stroke (6.9% of the group).
+
+| Measure | Result on NHANES |
+|---|---|
+| ROC-AUC | 0.631 (95% CI 0.595–0.666), down from 0.798 on the training data's test set |
+| Ranking by age alone | ROC-AUC 0.696, better than the model |
+| Calibration as deployed | average predicted risk 39.0%, actual rate 6.9% (calibration error 32.1%) |
+| After recalibrating on half the data | calibration error 1.8% on the other half |
+
+The model does not transfer well to this population: ranking people by age alone works better. Its percentages are far too high because half the training patients had heart disease; refitting the scale on local data fixes that, but not the ranking. The main reason is blood pressure, the model's strongest input. On its own it separates sick from healthy far better in the training data (ROC-AUC 0.75) than in NHANES (0.55), partly because 66% of NHANES participants with heart disease take blood-pressure or cholesterol medication, which lowers those readings. Even among people not on medication the model doesn't beat age alone, so differences in population and in how heart disease is defined matter too. The model should not be used outside populations like its training data without retraining. To reproduce: `python src/external_validation.py` (downloads the NHANES files from CDC, about 15 MB).
+
 ## SQL Data Layer
 
 The `sql/` folder rebuilds the data preparation in SQL with DuckDB: a data-quality profile (it flags 1,321 physiologically impossible blood-pressure readings), cleaning and feature engineering, and disease rates by age band and blood-pressure category. The deployed model is unchanged. To run it: `pip install duckdb`, then `python train_from_sql.py`.
