@@ -87,7 +87,17 @@ For each patient, the API tries every combination of realistic, healthier change
 ## US Population Model
 
 <!-- nhanes-model:start -->
-Not trained yet. Run `python src/train_nhanes_model.py` to download five NHANES surveys from CDC, train on 2009–2016 and test on 2017–2020; this section then fills in automatically.
+Trained on 18,205 US adults from NHANES 2009-2010, 2011-2012, 2013-2014, 2015-2016 and tested on 6,747 adults from NHANES 2017-2020, a later survey the model never saw (with a new blood-pressure device). Inputs: the 11 app inputs plus whether the person takes blood-pressure or cholesterol medication.
+
+| On the unseen 2017–2020 survey | ROC-AUC |
+|---|---|
+| US population model | 0.831 (95% CI 0.817–0.844) |
+| Same model without the medication inputs | 0.811 |
+| Ranking by age alone | 0.780 |
+| Logistic regression, same inputs | 0.828 |
+| Ages 30–65: US population model vs clinic model | 0.793 vs 0.608 |
+
+It beats age alone. Calibration on the unseen survey: average predicted risk 11.5% against 12.2% observed (calibration error 1.4%). Caveat: medication partly reflects treatment after a diagnosis, so this model recognises existing heart disease; it does not forecast future risk. Reproduce with `python src/train_nhanes_model.py`.
 <!-- nhanes-model:end -->
 
 ## Monitoring Without Patient Data

@@ -1,0 +1,27 @@
+{
+  "model_name": "XGBoost (NHANES)",
+  "description": "Trained on 18,205 US adults from NHANES 2009\u20132016; tested on 6,747 adults from the later 2017-2020 survey.",
+  "features": [
+    "age",
+    "gender",
+    "height",
+    "weight",
+    "ap_hi",
+    "ap_lo",
+    "cholesterol",
+    "gluc",
+    "smoke",
+    "alco",
+    "active",
+    "bp_meds",
+    "lipid_meds"
+  ],
+  "test_metrics": {
+    "roc_auc": 0.8307,
+    "roc_auc_age_alone": 0.78,
+    "ece": 0.0142,
+    "brier": 0.0882
+  },
+  "trained_at": "2026-10-24",
+  "xgboost_version": "2.1.4"
+}

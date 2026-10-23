@@ -19,5 +19,79 @@
       }
     }
   },
-  "nhanes": null
+  "nhanes": {
+    "trained_at": "2026-10-24",
+    "xgboost_version": "2.1.4",
+    "features": [
+      "age",
+      "gender",
+      "height",
+      "weight",
+      "ap_hi",
+      "ap_lo",
+      "cholesterol",
+      "gluc",
+      "smoke",
+      "alco",
+      "active",
+      "bp_meds",
+      "lipid_meds"
+    ],
+    "hyperparameters": {
+      "max_depth": 2,
+      "n_estimators": 287,
+      "cv_auc": 0.8492
+    },
+    "train": {
+      "cycles": [
+        "2009-2010",
+        "2011-2012",
+        "2013-2014",
+        "2015-2016"
+      ],
+      "patients": 18205,
+      "fit": 14564,
+      "calibration": 3641,
+      "cvd_rate": 0.1058
+    },
+    "test_cycle": "2017-2020",
+    "test": {
+      "patients": 6747,
+      "cvd_cases": 822,
+      "cvd_rate": 0.1218,
+      "roc_auc": 0.8307,
+      "roc_auc_95ci": [
+        0.8169,
+        0.8442
+      ],
+      "roc_auc_age_alone": 0.78,
+      "roc_auc_age_alone_95ci": [
+        0.7638,
+        0.7949
+      ],
+      "roc_auc_logistic": 0.8276,
+      "roc_auc_by_sex": {
+        "women": 0.8029,
+        "men": 0.8442
+      },
+      "roc_auc_untreated": 0.7925,
+      "roc_auc_untreated_age_alone": 0.7872,
+      "mean_predicted_risk": 0.1152,
+      "ece": 0.0142,
+      "brier": 0.0882,
+      "venn_abers_width_points": {
+        "median": 0.47,
+        "p90": 1.98
+      }
+    },
+    "ablation_without_medication": {
+      "roc_auc": 0.8113
+    },
+    "comparison_age_30_65": {
+      "patients": 4199,
+      "us_population_model": 0.7935,
+      "clinic_model": 0.6083,
+      "age_alone": 0.7044
+    }
+  }
 }
