@@ -14,7 +14,7 @@ function ShapTooltip({ active, payload }: { active?: boolean; payload?: { payloa
   if (!active || !payload?.length) return null;
   const row = payload[0].payload;
   return (
-    <div className="rounded-sm border border-gold/40 bg-ink-2 px-3 py-2 text-[0.95rem] shadow-xl">
+    <div className="rounded-xs border border-gold/40 bg-ink-2 px-3 py-2 text-[0.95rem] shadow-xl">
       <div className="font-medium text-cream">{row.label}</div>
       <div className="text-stone">Patient value: {formatFeatureValue(row.feature, row.value)}</div>
       <div className="text-stone">
