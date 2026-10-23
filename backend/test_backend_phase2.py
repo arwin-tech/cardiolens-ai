@@ -188,9 +188,12 @@ class TestCardioLensAPI:
         "origin,allowed",
         [
             ("https://cardiolens-ai.vercel.app", True),
-            ("https://cardiolens-ai-git-main-arwin-tech.vercel.app", True),   # Vercel preview
+            ("https://cardiolensai.vercel.app", True),                         # second production domain
+            ("https://cardiolens-m0a2yk6n3-arwin-s-projects.vercel.app", True),  # Vercel preview
+            ("https://cardiolens-git-main-arwin-s-projects.vercel.app", True),   # branch preview
             ("http://localhost:5173", True),
-            ("https://some-other-app.vercel.app", False),                     # used to be allowed
+            ("https://some-other-app.vercel.app", False),                       # used to be allowed
+            ("https://cardiolens-copycat.vercel.app", False),                   # someone else's project
             ("https://evil.example.com", False),
         ],
     )

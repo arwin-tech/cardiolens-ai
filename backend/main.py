@@ -63,11 +63,16 @@ logger.info(f"Metadata path: {METADATA_PATH}")
 # Parse allowed origins from environment
 ALLOWED_ORIGINS_STR = os.getenv(
     "ALLOWED_ORIGINS",
-    "https://cardiolens-ai.vercel.app,http://localhost:5173,http://localhost:4173,http://localhost:3000"
+    "https://cardiolens-ai.vercel.app,https://cardiolensai.vercel.app,http://localhost:5173,http://localhost:4173,http://localhost:3000"
 )
 ALLOWED_ORIGINS = [o.strip() for o in ALLOWED_ORIGINS_STR.split(",") if o.strip()]
-# This project's Vercel preview deployments (not every *.vercel.app site) and local dev servers
-ALLOWED_ORIGIN_REGEX = r"https://cardiolens-ai(-[a-z0-9-]+)?\.vercel\.app|http://localhost:\d+"
+# Both production domains, this project's Vercel previews (they always end in the team slug
+# "-arwin-s-projects", which no one else can use) and local dev servers. Not every *.vercel.app site.
+ALLOWED_ORIGIN_REGEX = (
+    r"https://(cardiolens-ai|cardiolensai)\.vercel\.app"
+    r"|https://cardiolens[a-z0-9-]*-arwin-s-projects\.vercel\.app"
+    r"|http://localhost:\d+"
+)
 
 VERSION = "2.2.0"
 FEATURES = ["age", "gender", "height", "weight", "ap_hi", "ap_lo", "cholesterol", "gluc", "smoke", "alco", "active"]
