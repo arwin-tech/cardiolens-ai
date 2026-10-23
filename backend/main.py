@@ -1,25 +1,35 @@
 """
-CardioLens AI Backend v2.1.0
+CardioLens AI Backend v2.2.0
 
-FastAPI service that scores cardiovascular risk with an XGBoost model and
-explains each prediction with exact per-patient SHAP values.
+FastAPI service that scores cardiovascular risk with XGBoost models, explains each
+prediction with exact per-patient SHAP values, gives a calibrated risk range
+(Venn-Abers), suggests the smallest changes that lower risk, and keeps
+privacy-safe monitoring counts.
 """
 
+import asyncio
 import io
 import json
 import logging
 import os
+import sys
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import joblib
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ValidationError, field_validator
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # sibling modules, run from backend/ or the repo root
+from counterfactuals import suggest as suggest_counterfactuals  # noqa: E402
+from monitoring import MonitoringStore  # noqa: E402
+from venn_abers import VennAbersGrid  # noqa: E402
 
 # ============================================================================
 # LOGGING CONFIGURATION
@@ -34,7 +44,8 @@ logger = logging.getLogger(__name__)
 # PATH CONFIGURATION
 # ============================================================================
 BASE_DIR = Path(__file__).resolve().parent
-MODEL_PATH = BASE_DIR / "models" / "model_pipeline.pkl"
+MODELS_DIR = BASE_DIR / "models"
+MODEL_PATH = MODELS_DIR / "model_pipeline.pkl"
 METADATA_PATH = BASE_DIR / "models" / "model_metadata.json"
 
 # Override from environment if needed
@@ -58,8 +69,11 @@ ALLOWED_ORIGINS = [o.strip() for o in ALLOWED_ORIGINS_STR.split(",") if o.strip(
 # This project's Vercel preview deployments (not every *.vercel.app site) and local dev servers
 ALLOWED_ORIGIN_REGEX = r"https://cardiolens-ai(-[a-z0-9-]+)?\.vercel\.app|http://localhost:\d+"
 
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 FEATURES = ["age", "gender", "height", "weight", "ap_hi", "ap_lo", "cholesterol", "gluc", "smoke", "alco", "active"]
+NHANES_FEATURES = FEATURES + ["bp_meds", "lipid_meds"]
+DEFAULT_MODEL = "kaggle"
+MONITORED_ENDPOINTS = {"predict", "explain", "what-if", "counterfactuals", "batch-predict"}
 MAX_UPLOAD_BYTES = 2_000_000   # batch CSV size limit (protects the small free-tier server)
 MAX_BATCH_ROWS = 5_000
 
@@ -82,6 +96,9 @@ class PatientInput(BaseModel):
     smoke: int = Field(..., ge=0, le=1, description="0=No, 1=Yes")
     alco: int = Field(..., ge=0, le=1, description="0=No, 1=Yes")
     active: int = Field(..., ge=0, le=1, description="0=No, 1=Yes")
+    # Used only by the US population (NHANES) model; optional so existing clients keep working
+    bp_meds: int = Field(0, ge=0, le=1, description="Taking blood-pressure medication: 0=No, 1=Yes")
+    lipid_meds: int = Field(0, ge=0, le=1, description="Taking cholesterol medication: 0=No, 1=Yes")
 
     @field_validator("ap_lo")
     @classmethod
@@ -103,6 +120,9 @@ class PredictionResponse(BaseModel):
     patient_features: Dict[str, Any]
     model_version: str
     disclaimer: str
+    model_id: str = DEFAULT_MODEL
+    model_name: str = ""
+    risk_range: Optional[List[float]] = None  # calibrated range in percent (Venn-Abers)
 
 
 class SHAPFeature(BaseModel):
@@ -143,165 +163,120 @@ class HealthResponse(BaseModel):
 # SERVICE LAYER: MODEL MANAGER
 # ============================================================================
 
-class ModelManager:
-    """Manages model loading, predictions, and lifecycle"""
-    
-    def __init__(self, model_path: Path = MODEL_PATH, metadata_path: Path = METADATA_PATH):
-        self.model_path = model_path
-        self.metadata_path = metadata_path
+def risk_category(p: float) -> str:
+    if p < 0.3:
+        return "Low"
+    if p < 0.5:
+        return "Moderate"
+    if p < 0.7:
+        return "Elevated"
+    return "High"
+
+
+class ModelBundle:
+    """One deployed model plus its uncertainty ranges and monitoring reference."""
+
+    def __init__(self, model_id: str, name: str, model_path: Path, metadata_path: Path, features: List[str],
+                 uncertainty_path: Path, reference_path: Path, default_metadata: Optional[Dict[str, Any]] = None):
+        self.id, self.name, self.features = model_id, name, features
+        self.model_path, self.metadata_path = model_path, metadata_path
+        self.uncertainty_path, self.reference_path = uncertainty_path, reference_path
+        self.default_metadata = default_metadata or {}
         self.model = None
-        self.metadata = None
+        self.metadata: Dict[str, Any] = {}
+        self.uncertainty: Optional[VennAbersGrid] = None
+        self.reference: Optional[Dict[str, Dict[str, float]]] = None
         self.is_loaded = False
         self.load()
 
     def load(self):
-        """Load model and metadata from disk"""
         try:
-            if self.model_path.exists():
-                self.model = joblib.load(self.model_path)
-                logger.info(f"✓ Model loaded from {self.model_path}")
-            else:
-                logger.warning(f"✗ Model file not found at {self.model_path}")
+            if not self.model_path.exists():
+                logger.warning(f"✗ {self.id}: model file not found at {self.model_path}")
                 return
-
-            if self.metadata_path.exists():
-                with open(self.metadata_path, "r") as f:
-                    self.metadata = json.load(f)
-                logger.info(f"✓ Metadata loaded from {self.metadata_path}")
+            if self.model_path.suffix == ".json":  # XGBoost's version-safe format
+                self.model = xgb.XGBClassifier()
+                self.model.load_model(self.model_path)
             else:
-                logger.warning(f"✗ Metadata file not found at {self.metadata_path}")
-                self.metadata = self._default_metadata()
-
+                self.model = joblib.load(self.model_path)
+            self.metadata = (json.loads(self.metadata_path.read_text()) if self.metadata_path.exists()
+                             else dict(self.default_metadata))
+            if self.uncertainty_path.exists():
+                self.uncertainty = VennAbersGrid.load(self.uncertainty_path)
+            if self.reference_path.exists():
+                self.reference = json.loads(self.reference_path.read_text())
             self.is_loaded = True
+            logger.info(f"✓ {self.id}: model loaded from {self.model_path}")
         except Exception as e:
-            logger.error(f"✗ Failed to load model: {e}")
+            logger.error(f"✗ {self.id}: failed to load model: {e}")
             self.is_loaded = False
 
-    def _default_metadata(self) -> Dict[str, Any]:
-        """Return default metadata when file not found"""
-        return {
-            "model_name": "XGBoost Cardiovascular Risk",
-            "version": "2.0.0",
-            "features": [
-                "age", "gender", "height", "weight", "ap_hi", "ap_lo",
-                "cholesterol", "gluc", "smoke", "alco", "active"
-            ],
-            "test_metrics": {
-                "accuracy": 0.7324,
-                "precision": 0.7508,
-                "recall": 0.6951,
-                "f1": 0.7219,
-                "roc_auc": 0.7978
-            }
-        }
+    def _raw_model(self):
+        if hasattr(self.model, "named_steps"):
+            return (self.model.named_steps.get("model") or self.model.named_steps.get("classifier")
+                    or self.model.steps[-1][1])
+        return self.model
 
-    def predict(self, patient: PatientInput) -> Dict[str, Any]:
-        """Generate risk prediction for patient"""
+    def row(self, patient: "PatientInput") -> List[float]:
+        values = patient.model_dump()
+        return [float(values[f]) for f in self.features]
+
+    def predict_matrix(self, X) -> np.ndarray:
         if not self.is_loaded or self.model is None:
             raise RuntimeError("Model not loaded")
+        return self.model.predict_proba(np.asarray(X, dtype=float))[:, 1]
 
-        features = np.array([[
-            patient.age, patient.gender, patient.height, patient.weight,
-            patient.ap_hi, patient.ap_lo, patient.cholesterol,
-            patient.gluc, patient.smoke, patient.alco, patient.active
-        ]])
-
-        proba = self.model.predict_proba(features)[0]
-        risk_prob = float(proba[1])
-        
-        # Standardise height unit auto-detection (cm vs m)
-        height_m = patient.height / 100.0 if patient.height > 3 else patient.height
-        bmi = round(patient.weight / (height_m ** 2), 1) if height_m > 0 else 0.0
-
-        # Categorize risk
-        if risk_prob < 0.3:
-            category = "Low"
-        elif risk_prob < 0.5:
-            category = "Moderate"
-        elif risk_prob < 0.7:
-            category = "Elevated"
-        else:
-            category = "High"
-
-        return {
-            "risk_probability": risk_prob,
-            "risk_percentage": risk_prob * 100,
-            "risk_category": category,
-            "bmi": bmi,
-            "features_array": features[0].tolist()
+    def predict(self, patient: "PatientInput") -> Dict[str, Any]:
+        risk = float(self.predict_matrix([self.row(patient)])[0])
+        result = {
+            "risk_probability": risk,
+            "risk_percentage": risk * 100,
+            "risk_category": risk_category(risk),
+            "bmi": round(patient.weight / (patient.height / 100.0) ** 2, 1),
+            "risk_range": None,
         }
+        if self.uncertainty:
+            lo, hi = self.uncertainty.interval(risk)
+            result["risk_range"] = [round(lo * 100, 1), round(hi * 100, 1)]
+        return result
 
+    def explain(self, patient: "PatientInput") -> Dict[str, Any]:
+        """Exact per-patient SHAP values (TreeSHAP), computed natively by XGBoost.
 
-# ============================================================================
-# SERVICE LAYER: SHAP EXPLAINER
-# ============================================================================
-
-class SHAPExplainer:
-    """Exact per-patient SHAP values (TreeSHAP), computed natively by XGBoost.
-
-    XGBoost's pred_contribs gives the same values as shap.TreeExplainer without importing
-    the shap library at runtime. Values are in log-odds; together with the baseline they
-    add up exactly to the model's prediction for this patient.
-    """
-
-    FEATURE_NAMES = [
-        "age", "gender", "height", "weight", "ap_hi", "ap_lo",
-        "cholesterol", "gluc", "smoke", "alco", "active"
-    ]
-
-    def __init__(self, model_manager: ModelManager):
-        self.model_manager = model_manager
-
-    def _raw_model(self):
-        model_obj = self.model_manager.model
-        if hasattr(model_obj, "named_steps"):
-            return (
-                model_obj.named_steps.get("model")
-                or model_obj.named_steps.get("classifier")
-                or model_obj.steps[-1][1]
-            )
-        return model_obj
-
-    def explain(self, patient: PatientInput) -> Dict[str, Any]:
-        """Return this patient's SHAP values, ranked by absolute impact"""
-        if not self.model_manager or self.model_manager.model is None:
-            raise RuntimeError("Model not initialized")
-
-        raw_model = self._raw_model()
-        if not hasattr(raw_model, "get_booster"):
-            raise RuntimeError("SHAP explanations require the XGBoost model")
-
-        X = pd.DataFrame([[
-            float(patient.age), float(patient.gender), float(patient.height),
-            float(patient.weight), float(patient.ap_hi), float(patient.ap_lo),
-            float(patient.cholesterol), float(patient.gluc), float(patient.smoke),
-            float(patient.alco), float(patient.active)
-        ]], columns=self.FEATURE_NAMES)
-
-        contribs = raw_model.get_booster().predict(xgb.DMatrix(X), pred_contribs=True)[0]
+        pred_contribs gives the same values as shap.TreeExplainer without the shap library.
+        Values are in log-odds; with the baseline they add up exactly to the prediction.
+        """
+        raw = self._raw_model()
+        if not hasattr(raw, "get_booster"):
+            raise RuntimeError("SHAP explanations require an XGBoost model")
+        X = pd.DataFrame([self.row(patient)], columns=self.features)
+        contribs = raw.get_booster().predict(xgb.DMatrix(X), pred_contribs=True)[0]
         shap_values, bias = contribs[:-1], float(contribs[-1])
-
         explanations = [
-            {
-                "feature": name,
-                "value": float(value),
-                "shap_value": round(float(sv), 4),
-                "impact": "positive" if sv > 0 else "negative",
-                "feature_rank": 0,
-            }
-            for name, value, sv in zip(self.FEATURE_NAMES, X.iloc[0], shap_values)
+            {"feature": name, "value": float(value), "shap_value": round(float(sv), 4),
+             "impact": "positive" if sv > 0 else "negative", "feature_rank": 0}
+            for name, value, sv in zip(self.features, X.iloc[0], shap_values)
         ]
         explanations.sort(key=lambda x: abs(x["shap_value"]), reverse=True)
         for idx, exp in enumerate(explanations):
             exp["feature_rank"] = idx + 1
-
-        prediction = self.model_manager.predict(patient)
-
         return {
             "features": explanations,
             "base_value": round(float(1.0 / (1.0 + np.exp(-bias))), 4),
-            "prediction_value": prediction["risk_probability"],
-            "disclaimer": "SHAP values (log-odds) explain this model's prediction for this patient. Not a medical diagnosis."
+            "prediction_value": self.predict(patient)["risk_probability"],
+            "disclaimer": "SHAP values (log-odds) explain this model's prediction for this patient. Not a medical diagnosis.",
+        }
+
+    def info(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.metadata.get("description", ""),
+            "features": self.features,
+            "test_metrics": self.metadata.get("test_metrics", {}),
+            "uncertainty": ({"method": "Venn-Abers", "calibration_patients": self.uncertainty.calibration_patients}
+                            if self.uncertainty else None),
+            "default": self.id == DEFAULT_MODEL,
         }
 
 
@@ -309,9 +284,38 @@ class SHAPExplainer:
 # GLOBAL INITIALIZATION
 # ============================================================================
 
-# Initialize services at module level
-model_manager = ModelManager()
-shap_explainer = SHAPExplainer(model_manager)
+MODELS: Dict[str, ModelBundle] = {
+    "kaggle": ModelBundle(
+        "kaggle", "Clinic model", MODEL_PATH, METADATA_PATH, FEATURES,
+        MODELS_DIR / "uncertainty_kaggle.json", MODELS_DIR / "reference_kaggle.json",
+        default_metadata={"model_name": "XGBoost Cardiovascular Risk",
+                          "test_metrics": {"accuracy": 0.7324, "precision": 0.7508, "recall": 0.6951,
+                                           "f1": 0.7219, "roc_auc": 0.7978}},
+    ),
+}
+MODELS["kaggle"].metadata.setdefault(
+    "description", "Trained on 70,000 patients from the Kaggle Cardiovascular Disease dataset.")
+_nhanes = ModelBundle(
+    "nhanes", "US population model", MODELS_DIR / "nhanes_model.json", MODELS_DIR / "nhanes_metadata.json",
+    NHANES_FEATURES, MODELS_DIR / "uncertainty_nhanes.json", MODELS_DIR / "reference_nhanes.json",
+)
+if _nhanes.is_loaded:  # appears once src/train_nhanes_model.py has been run
+    MODELS["nhanes"] = _nhanes
+
+model_manager = MODELS["kaggle"]  # the default model, under its original name
+monitor = MonitoringStore()
+
+
+def get_model(model_id: str) -> ModelBundle:
+    bundle = MODELS.get(model_id)
+    if bundle is None:
+        raise HTTPException(status_code=404, detail=f"Unknown model '{model_id}'. Available: {', '.join(MODELS)}")
+    if not bundle.is_loaded:
+        raise HTTPException(status_code=503, detail="Model not available. Backend running in degraded mode.")
+    return bundle
+
+
+MODEL_QUERY = Query(DEFAULT_MODEL, description="Which model to use: 'kaggle' (default) or 'nhanes' if available")
 
 
 # ============================================================================
@@ -342,7 +346,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="CardioLens AI API",
     description="Explainable cardiovascular disease risk assessment backend",
-    version="2.1.0",
+    version=VERSION,
     lifespan=lifespan
 )
 
@@ -360,6 +364,22 @@ app.add_middleware(
 )
 
 logger.info("✅ CORS middleware configured successfully")
+
+
+@app.middleware("http")
+async def time_requests(request: Request, call_next):
+    """Record response times per endpoint (as coarse buckets) for the monitoring page."""
+    start = time.perf_counter()
+    response = await call_next(request)
+    path = request.url.path
+    endpoint = path[len("/api/"):] if path.startswith("/api/") else ""
+    if request.method == "POST" and endpoint in MONITORED_ENDPOINTS:
+        ms = (time.perf_counter() - start) * 1000
+        if monitor.persistent:  # don't make the caller wait on a remote database
+            asyncio.get_running_loop().run_in_executor(None, monitor.record_request, endpoint, ms)
+        else:
+            monitor.record_request(endpoint, ms)
+    return response
 
 # ============================================================================
 # ROUTE HANDLERS
@@ -379,6 +399,9 @@ async def root():
             "explain": "POST /api/explain",
             "what_if": "POST /api/what-if",
             "batch_predict": "POST /api/batch-predict",
+            "counterfactuals": "POST /api/counterfactuals",
+            "models": "GET /api/models",
+            "monitoring": "GET /api/monitoring",
         },
         "docs": "/docs",
         "model_status": "loaded" if model_manager.is_loaded else "degraded"
@@ -399,55 +422,47 @@ async def health_check():
 
 
 @app.post("/api/predict", response_model=PredictionResponse)
-async def predict(patient: PatientInput):
-    """Generate cardiovascular risk prediction for patient"""
-    if not model_manager.is_loaded:
-        raise HTTPException(
-            status_code=503,
-            detail="Model not available. Backend running in degraded mode."
-        )
-    
+async def predict(patient: PatientInput, background_tasks: BackgroundTasks, model: str = MODEL_QUERY):
+    """Cardiovascular risk for one patient, with a calibrated range when available."""
+    m = get_model(model)
     try:
-        result = model_manager.predict(patient)
-        return PredictionResponse(
-            risk_probability=result["risk_probability"],
-            risk_percentage=result["risk_percentage"],
-            risk_category=result["risk_category"],
-            bmi=result["bmi"],
-            patient_features=patient.model_dump(),
-            model_version=model_manager.metadata.get("model_name", "XGBoost") if model_manager.metadata else "XGBoost",
-            disclaimer="DISCLAIMER: Research-grade prediction system. Not a medical diagnosis."
-        )
+        result = m.predict(patient)
     except Exception as e:
         logger.error(f"Prediction error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Prediction failed")
+    background_tasks.add_task(monitor.record_predictions, m.id, [patient.model_dump()], [result["risk_category"]], m.features)
+    return PredictionResponse(
+        risk_probability=result["risk_probability"],
+        risk_percentage=result["risk_percentage"],
+        risk_category=result["risk_category"],
+        bmi=result["bmi"],
+        patient_features=patient.model_dump(),
+        model_version=m.metadata.get("model_name", m.name),
+        disclaimer="DISCLAIMER: Research-grade prediction system. Not a medical diagnosis.",
+        model_id=m.id,
+        model_name=m.name,
+        risk_range=result["risk_range"],
+    )
 
 
 @app.post("/api/explain", response_model=ExplainabilityResponse)
-async def explain(patient: PatientInput):
-    """Generate SHAP-based feature importance explanation"""
-    if not model_manager.is_loaded:
-        raise HTTPException(
-            status_code=503,
-            detail="Explainer service unavailable. Model not loaded."
-        )
-    
+async def explain(patient: PatientInput, model: str = MODEL_QUERY):
+    """Exact per-patient SHAP explanation"""
+    m = get_model(model)
     try:
-        return shap_explainer.explain(patient)
+        return m.explain(patient)
     except Exception as e:
         logger.error(f"Explanation error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Explanation failed")
 
 
 @app.post("/api/what-if")
-async def execute_what_if(request: WhatIfRequest):
+async def execute_what_if(request: WhatIfRequest, model: str = MODEL_QUERY):
     """Compare the predicted risk for a patient before and after a change."""
-    if not model_manager.is_loaded:
-        raise HTTPException(status_code=503, detail="Model service unavailable")
-
+    m = get_model(model)
     try:
-        orig_pct = round(model_manager.predict(request.original)["risk_percentage"], 1)
-        sim_pct = round(model_manager.predict(request.modified)["risk_percentage"], 1)
+        orig_pct = round(m.predict(request.original)["risk_percentage"], 1)
+        sim_pct = round(m.predict(request.modified)["risk_percentage"], 1)
     except Exception as e:
         logger.error(f"What-if error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Counterfactual calculation failed")
@@ -461,6 +476,34 @@ async def execute_what_if(request: WhatIfRequest):
     }
 
 
+@app.post("/api/counterfactuals")
+async def counterfactual_suggestions(patient: PatientInput, model: str = MODEL_QUERY):
+    """The smallest sets of changes (one, two and three) that lower this patient's predicted risk.
+
+    Only changeable factors move, and only in a healthier direction; age, sex, height and
+    medication never change. The result describes the model, not proven medical effects.
+    """
+    m = get_model(model)
+    try:
+        return suggest_counterfactuals(patient.model_dump(), m.features, m.predict_matrix)
+    except Exception as e:
+        logger.error(f"Counterfactual error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Could not compute suggestions")
+
+
+@app.get("/api/models")
+async def list_models():
+    """The models this server can use, with their test results."""
+    return {"default": DEFAULT_MODEL, "models": [m.info() for m in MODELS.values() if m.is_loaded]}
+
+
+@app.get("/api/monitoring")
+async def monitoring_summary(days: int = Query(30, ge=1, le=90)):
+    """Aggregate, privacy-safe usage statistics: daily counts, response times, risk mix and input drift."""
+    references = {m.id: m.reference for m in MODELS.values() if m.is_loaded and m.reference}
+    return monitor.summary(days, references)
+
+
 def _describe_row_error(err: ValidationError, values: Dict[str, Any]) -> str:
     """Turn a Pydantic error for one CSV row into a short, readable reason."""
     first = err.errors()[0]
@@ -472,14 +515,13 @@ def _describe_row_error(err: ValidationError, values: Dict[str, Any]) -> str:
 
 
 @app.post("/api/batch-predict")
-async def batch_predict(file: UploadFile = File(...)):
+async def batch_predict(background_tasks: BackgroundTasks, file: UploadFile = File(...), model: str = MODEL_QUERY):
     """Score many patients from a CSV file.
 
     Every row goes through the same validation as /api/predict. Rows that fail it
     are not scored; they are listed in `skipped` with the reason.
     """
-    if not model_manager.is_loaded:
-        raise HTTPException(status_code=503, detail="Model service unavailable")
+    m = get_model(model)
     if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="Please upload a CSV file")
 
@@ -500,11 +542,11 @@ async def batch_predict(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Uploaded CSV contains no records")
     if len(df) > MAX_BATCH_ROWS:
         raise HTTPException(status_code=400, detail=f"Too many rows ({len(df):,}). The limit is {MAX_BATCH_ROWS:,} per file.")
-    missing = [f for f in FEATURES if f not in df.columns]
+    missing = [f for f in m.features if f not in df.columns]
     if missing:
         raise HTTPException(status_code=400, detail=f"Missing required columns: {', '.join(missing)}")
 
-    numeric = df[FEATURES].apply(pd.to_numeric, errors="coerce")
+    numeric = df[m.features].apply(pd.to_numeric, errors="coerce")
     valid_index: List[Any] = []
     patients: List[PatientInput] = []
     skipped: List[Dict[str, Any]] = []
@@ -523,8 +565,8 @@ async def batch_predict(file: UploadFile = File(...)):
     results: List[Dict[str, Any]] = []
     if patients:
         try:
-            X = np.array([[getattr(p, f) for f in FEATURES] for p in patients], dtype=float)
-            probabilities = model_manager.model.predict_proba(X)[:, 1]
+            X = np.array([m.row(p) for p in patients], dtype=float)
+            probabilities = m.predict_matrix(X)
         except Exception as e:
             logger.error(f"Batch prediction error: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Batch prediction failed")
@@ -534,6 +576,8 @@ async def batch_predict(file: UploadFile = File(...)):
             row["risk_score"] = round(float(p), 4)
             row["high_risk"] = bool(p >= 0.5)
             results.append(row)
+        background_tasks.add_task(monitor.record_predictions, m.id, [p.model_dump() for p in patients],
+                                  [risk_category(float(p)) for p in probabilities], m.features)
 
     return {
         "total_records": int(len(df)),

@@ -7,6 +7,7 @@ import Home from './pages/Home';
 import Analyze from './pages/Analyze';
 import Results from './pages/Results';
 import About from './pages/About';
+import Monitoring from './pages/Monitoring';
 import { BackendStatusProvider } from './context/BackendStatus';
 
 function ScrollToTop() {
@@ -30,6 +31,7 @@ export default function App() {
               <Route path="/analyze" element={<Analyze />} />
               <Route path="/results" element={<Results />} />
               <Route path="/about" element={<About />} />
+              <Route path="/monitoring" element={<Monitoring />} />
             </Routes>
           </main>
           <Footer />

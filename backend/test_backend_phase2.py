@@ -202,3 +202,99 @@ class TestCardioLensAPI:
         assert (response.headers.get("access-control-allow-origin") == origin) is allowed
         assert "access-control-allow-credentials" not in response.headers
 
+
+
+# ============================================================================
+# Uncertainty, counterfactuals, model registry and monitoring
+# ============================================================================
+from backend.main import MODELS, monitor  # noqa: E402
+
+MODERATE = dict(age=53, gender=2, height=176, weight=84, ap_hi=135, ap_lo=85, cholesterol=1, gluc=1,
+                smoke=1, alco=0, active=1)
+HIGH = dict(age=61, gender=2, height=172, weight=98, ap_hi=165, ap_lo=100, cholesterol=3, gluc=2,
+            smoke=1, alco=0, active=0)
+
+
+@pytest.fixture
+def api():
+    return TestClient(app)
+
+
+def test_prediction_includes_calibrated_range(api):
+    body = api.post("/api/predict", json=MODERATE).json()
+    lo, hi = body["risk_range"]
+    assert 0 <= lo <= hi <= 100
+    assert hi - lo < 15
+    assert body["model_id"] == "kaggle"
+
+
+def test_counterfactuals_lower_risk_and_never_touch_fixed_traits(api):
+    body = api.post("/api/counterfactuals", json=HIGH).json()
+    assert body["plans"], "a high-risk patient should get suggestions"
+    previous = body["baseline_risk"]
+    for k, plan in enumerate(body["plans"], start=1):
+        assert len(plan["changes"]) <= 3
+        assert plan["risk"] < previous  # each bigger plan must do better than the smaller one
+        previous = plan["risk"]
+        changed = {c["feature"] for c in plan["changes"]}
+        assert not changed & {"age", "gender", "height", "bp_meds", "lipid_meds"}
+
+
+def test_counterfactuals_empty_when_nothing_can_improve(api):
+    healthy = dict(age=34, gender=1, height=168, weight=60, ap_hi=115, ap_lo=75, cholesterol=1, gluc=1,
+                   smoke=0, alco=0, active=1)
+    body = api.post("/api/counterfactuals", json=healthy).json()
+    assert body["plans"] == []
+    assert "not proven medical effects" in body["note"]
+
+
+def test_counterfactuals_validate_input(api):
+    assert api.post("/api/counterfactuals", json={}).status_code == 422
+
+
+def test_unknown_model_is_rejected(api):
+    assert api.post("/api/predict?model=nope", json=MODERATE).status_code == 404
+
+
+def test_models_endpoint_lists_default(api):
+    body = api.get("/api/models").json()
+    ids = [m["id"] for m in body["models"]]
+    assert body["default"] == "kaggle" and "kaggle" in ids
+    kaggle = next(m for m in body["models"] if m["id"] == "kaggle")
+    assert kaggle["uncertainty"]["method"] == "Venn-Abers"
+
+
+def test_monitoring_counts_and_hides_small_numbers(api):
+    before = api.get("/api/monitoring").json()["predictions_total"]
+    api.post("/api/predict", json=MODERATE)
+    after = api.get("/api/monitoring").json()
+    assert after["predictions_total"] == before + 1
+    for counts in after["risk_categories"].values():
+        assert all(v is None or v >= 5 for v in counts.values())
+
+
+def test_monitoring_never_stores_raw_inputs(api):
+    odd = dict(MODERATE, weight=83.7, height=177.3, ap_hi=137, ap_lo=86)
+    api.post("/api/predict", json=odd)
+    stored = {str(r["bucket"]) for r in monitor.raw_rows()} | {str(r["metric"]) for r in monitor.raw_rows()}
+    for exact in ("83.7", "177.3", "137", "86"):
+        assert exact not in stored
+
+
+def test_monitoring_reports_drift_after_enough_predictions(api):
+    for _ in range(30):
+        api.post("/api/predict", json=MODERATE)
+    drift = api.get("/api/monitoring").json()["drift"]["kaggle"]
+    assert drift["status"] == "ok"
+    assert drift["features"]["ap_hi"]["psi"] > 0.25  # 30 identical patients look nothing like the training mix
+
+
+@pytest.mark.skipif("nhanes" not in MODELS, reason="run src/train_nhanes_model.py to create the US population model")
+def test_nhanes_model_uses_medication(api):
+    base = dict(MODERATE, bp_meds=0, lipid_meds=0)
+    treated = dict(base, bp_meds=1, lipid_meds=1)
+    r0 = api.post("/api/predict?model=nhanes", json=base).json()
+    r1 = api.post("/api/predict?model=nhanes", json=treated).json()
+    assert r0["model_id"] == "nhanes" and r0["risk_range"] is not None
+    assert r0["risk_probability"] != r1["risk_probability"]
+    assert api.post("/api/counterfactuals?model=nhanes", json=base).status_code == 200

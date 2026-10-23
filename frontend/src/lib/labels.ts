@@ -11,6 +11,8 @@ export const FEATURE_LABELS: Record<string, string> = {
   smoke: 'Smoking',
   alco: 'Alcohol',
   active: 'Physical activity',
+  bp_meds: 'BP medication',
+  lipid_meds: 'Cholesterol medication',
 };
 
 const LEVELS = ['', 'Normal', 'Above normal', 'Well above normal'];
@@ -36,6 +38,9 @@ export function formatFeatureValue(feature: string, value: number): string {
       return value ? 'Yes' : 'No';
     case 'active':
       return value ? 'Active' : 'Sedentary';
+    case 'bp_meds':
+    case 'lipid_meds':
+      return value ? 'Yes' : 'No';
     default:
       return String(value);
   }

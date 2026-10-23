@@ -3,6 +3,7 @@ import { Download, FileText, Upload } from 'lucide-react';
 import RiskGauge, { EmptyDial } from '../components/RiskGauge';
 import SHAPChart from '../components/SHAPChart';
 import WhatIfComparison from '../components/WhatIfComparison';
+import CounterfactualPanel from '../components/CounterfactualPanel';
 import { PageBackdrop, PageHeader } from '../components/Backdrop';
 import { FramedPanel, OrnateButton, OrnateLink } from '../components/ornaments';
 import { batchPredict, runWhatIf } from '../api/client';
@@ -10,18 +11,27 @@ import { useBackendState } from '../context/BackendStatus';
 import { formatFeatureValue } from '../lib/labels';
 import { EXAMPLES } from '../lib/examples';
 import { Assessment, readCachedAssessment, runAssessment } from '../lib/assess';
-import { BatchResponse, PatientInput, PredictionResponse, WhatIfResponse } from '../types/api';
+import { BatchResponse, ModelId, PatientInput, PredictionResponse, WhatIfResponse } from '../types/api';
 
 const BATCH_COLUMNS = ['age', 'gender', 'height', 'weight', 'ap_hi', 'ap_lo', 'cholesterol', 'gluc', 'smoke', 'alco', 'active'];
 
-const SAMPLE_CSV = [
-  BATCH_COLUMNS.join(','),
+const SAMPLE_ROWS = [
   '34,1,168,60,115,75,1,1,0,0,1',
   '53,2,176,84,135,85,1,1,1,0,1',
   '61,2,172,98,165,100,3,2,1,0,0',
   '45,1,160,72,128,82,2,1,0,0,1',
   '67,2,170,88,150,95,2,1,0,1,0',
-].join('\n');
+];
+const MED_SAMPLE = [',0,0', ',0,0', ',1,1', ',0,1', ',1,0'];
+
+function batchColumns(model: ModelId) {
+  return model === 'nhanes' ? [...BATCH_COLUMNS, 'bp_meds', 'lipid_meds'] : BATCH_COLUMNS;
+}
+
+function sampleCsv(model: ModelId) {
+  const rows = model === 'nhanes' ? SAMPLE_ROWS.map((r, i) => r + MED_SAMPLE[i]) : SAMPLE_ROWS;
+  return [batchColumns(model).join(','), ...rows].join('\n');
+}
 
 function downloadText(content: string, filename: string, type: string) {
   const url = URL.createObjectURL(new Blob([content], { type }));
@@ -52,9 +62,12 @@ interface ReportProps {
   riskPercentage: number;
   category: string;
   bmi: number;
+  model: ModelId;
+  modelName: string;
+  range?: [number, number] | null;
 }
 
-function ReportAndBatch({ patient, riskPercentage, category, bmi }: ReportProps) {
+function ReportAndBatch({ patient, riskPercentage, category, bmi, model, modelName, range }: ReportProps) {
   const [activeTab, setActiveTab] = useState<'report' | 'batch'>('report');
   const [batchFile, setBatchFile] = useState<File | null>(null);
   const [batchLoading, setBatchLoading] = useState(false);
@@ -83,10 +96,18 @@ function ReportAndBatch({ patient, riskPercentage, category, bmi }: ReportProps)
     line('Smoker', formatFeatureValue('smoke', patient.smoke)),
     line('Alcohol intake', formatFeatureValue('alco', patient.alco)),
     line('Physical activity', formatFeatureValue('active', patient.active)),
+    ...(model === 'nhanes'
+      ? [
+          line('BP medication', formatFeatureValue('bp_meds', patient.bp_meds ?? 0)),
+          line('Cholesterol medication', formatFeatureValue('lipid_meds', patient.lipid_meds ?? 0)),
+        ]
+      : []),
     '',
     'MODEL RESULT',
     '--------------------------------------------------------------------------------',
+    line('Model', modelName),
     line('Predicted risk', `${riskPercentage.toFixed(1)}%`),
+    ...(range ? [line('Calibrated range', `${range[0].toFixed(1)}-${range[1].toFixed(1)}%`)] : []),
     line('Risk level', category),
     '',
     'Research-grade prediction from a statistical model. Not a medical diagnosis.',
@@ -99,7 +120,7 @@ function ReportAndBatch({ patient, riskPercentage, category, bmi }: ReportProps)
     setBatchError(null);
     setBatchResult(null);
     try {
-      const result: BatchResponse = await batchPredict(batchFile);
+      const result: BatchResponse = await batchPredict(batchFile, model);
       setBatchResult(result);
     } catch (err: any) {
       setBatchError(err?.message || 'Batch scoring failed. Check that the file has the required columns.');
@@ -152,11 +173,11 @@ function ReportAndBatch({ patient, riskPercentage, category, bmi }: ReportProps)
         <div className="mt-6 space-y-5" role="tabpanel">
           <p className="text-stone">
             Score many patients at once from a CSV file. It needs these columns, with age in years:{' '}
-            <span className="text-parchment">{BATCH_COLUMNS.join(', ')}</span>.{' '}
+            <span className="text-parchment">{batchColumns(model).join(', ')}</span>.{' '}
             <button
               type="button"
               className="text-gold-bright underline decoration-gold/50 underline-offset-4 hover:text-cream"
-              onClick={() => downloadText(SAMPLE_CSV, 'cardiolens_sample.csv', 'text/csv')}
+              onClick={() => downloadText(sampleCsv(model), 'cardiolens_sample.csv', 'text/csv')}
             >
               Download a sample file
             </button>
@@ -357,6 +378,8 @@ export default function Results() {
 
   const { prediction, explanation } = result;
   const patient = prediction.patient_features;
+  const modelId: ModelId = prediction.model_id ?? 'kaggle';
+  const modelName = prediction.model_name || 'Clinic model';
 
   const handleSimulate = async () => {
     const modifiedFeatures = {
@@ -369,7 +392,7 @@ export default function Results() {
     setSimLoading(true);
     setSimError(null);
     try {
-      const res = await runWhatIf(patient, modifiedFeatures);
+      const res = await runWhatIf(patient, modifiedFeatures, modelId);
       setWhatIfData(res);
       setWhatIfDiastolic({ from: patient.ap_lo, to: modifiedFeatures.ap_lo });
     } catch (e: any) {
@@ -384,7 +407,7 @@ export default function Results() {
       <PageBackdrop />
       <PageHeader
         title="Patient assessment"
-        intro={`Scored by ${prediction.model_version}.`}
+        intro={`Scored by the ${modelId === 'nhanes' ? 'US population model' : 'clinic model'}.`}
         action={
           <OrnateLink to="/analyze" tone="umber" small>
             New assessment
@@ -395,7 +418,11 @@ export default function Results() {
       <div className="mx-auto max-w-5xl space-y-7 px-5">
         <div className="grid gap-7 md:grid-cols-5">
           <FramedPanel className="md:col-span-2" aria-label="Risk score">
-            <RiskGauge percentage={prediction.risk_percentage} category={prediction.risk_category} />
+            <RiskGauge
+              percentage={prediction.risk_percentage}
+              category={prediction.risk_category}
+              range={prediction.risk_range}
+            />
           </FramedPanel>
 
           <FramedPanel corners={false} className="md:col-span-3" aria-labelledby="measurements-title">
@@ -427,11 +454,20 @@ export default function Results() {
                 <span className="stat__value">{formatFeatureValue('cholesterol', patient.cholesterol)}</span>
               </div>
             </div>
+            {modelId === 'nhanes' && (
+              <p className="mt-4 text-stone">
+                Blood-pressure medication: <span className="text-parchment">{formatFeatureValue('bp_meds', patient.bp_meds ?? 0)}</span>
+                . Cholesterol medication:{' '}
+                <span className="text-parchment">{formatFeatureValue('lipid_meds', patient.lipid_meds ?? 0)}</span>
+              </p>
+            )}
             <p className="notice mt-6 text-[0.95rem]">{prediction.disclaimer}</p>
           </FramedPanel>
         </div>
 
         <SHAPChart features={explanation.features} />
+
+        <CounterfactualPanel patient={patient} model={modelId} />
 
         <FramedPanel corners={false} aria-labelledby="whatif-title">
           <h2 id="whatif-title" className="panel__title">
@@ -474,6 +510,9 @@ export default function Results() {
           riskPercentage={prediction.risk_percentage}
           category={prediction.risk_category}
           bmi={prediction.bmi}
+          model={modelId}
+          modelName={modelName}
+          range={prediction.risk_range}
         />
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { explainPrediction, predictRisk } from '../api/client';
-import { ExplainabilityResponse, PatientInput, PredictionResponse } from '../types/api';
+import { ExplainabilityResponse, ModelId, PatientInput, PredictionResponse } from '../types/api';
 
 export interface Assessment {
   prediction: PredictionResponse;
@@ -7,9 +7,9 @@ export interface Assessment {
 }
 
 /** Score a patient, explain the score, and keep the result for the Results page. */
-export async function runAssessment(data: PatientInput): Promise<Assessment> {
-  const prediction: PredictionResponse = await predictRisk(data);
-  const explanation: ExplainabilityResponse = await explainPrediction(data);
+export async function runAssessment(data: PatientInput, model: ModelId = 'kaggle'): Promise<Assessment> {
+  const prediction: PredictionResponse = await predictRisk(data, model);
+  const explanation: ExplainabilityResponse = await explainPrediction(data, model);
   sessionStorage.setItem('lastPrediction', JSON.stringify(prediction));
   sessionStorage.setItem('lastExplanation', JSON.stringify(explanation));
   return { prediction, explanation };

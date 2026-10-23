@@ -9,6 +9,7 @@ const LINKS = [
   { name: 'Analyze Risk', path: '/analyze' },
   { name: 'Results', path: '/results' },
   { name: 'About Model', path: '/about' },
+  { name: 'Monitoring', path: '/monitoring' },
 ];
 
 export default function Navbar() {

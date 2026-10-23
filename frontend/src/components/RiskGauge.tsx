@@ -4,6 +4,7 @@ import { riskColor } from '../lib/labels';
 interface Props {
   percentage: number;
   category: string;
+  range?: [number, number] | null;
 }
 
 const R = 74;
@@ -40,7 +41,7 @@ function DialFace() {
 const innerDisc = <circle cx="100" cy="100" r="66" fill="rgba(10,9,8,0.6)" stroke="rgba(183,154,108,0.18)" strokeWidth="1" />;
 
 /** Risk shown as an engraved brass dial: the arc sweeps to the predicted probability. */
-export default function RiskGauge({ percentage, category }: Props) {
+export default function RiskGauge({ percentage, category, range }: Props) {
   const pct = Math.max(0, Math.min(100, percentage));
   const color = riskColor(category);
   const [shown, setShown] = useState(0);
@@ -76,8 +77,18 @@ export default function RiskGauge({ percentage, category }: Props) {
           </span>
         </div>
       </div>
-      <p className="mt-5 max-w-[17rem] text-[0.95rem] text-stone">
-        The model's estimated probability that this patient has cardiovascular disease.
+      {range && (
+        <p className="mt-5 text-parchment">
+          Calibrated range{' '}
+          <strong className="font-semibold text-cream">
+            {range[0].toFixed(1)}–{range[1].toFixed(1)}%
+          </strong>
+        </p>
+      )}
+      <p className={`${range ? 'mt-2' : 'mt-5'} max-w-[19rem] text-[0.95rem] text-stone`}>
+        {range
+          ? 'The model’s estimate, and how often held-out patients with similar scores actually had heart disease (Venn–Abers).'
+          : 'The model’s estimated probability that this patient has cardiovascular disease.'}
       </p>
     </div>
   );

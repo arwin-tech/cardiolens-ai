@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PatientForm from '../components/PatientForm';
 import { PageBackdrop, PageHeader } from '../components/Backdrop';
 import { runAssessment } from '../lib/assess';
-import { PatientInput } from '../types/api';
+import { ModelId, ModelInfo, PatientInput } from '../types/api';
+import { getModels } from '../api/client';
 import { useBackendState } from '../context/BackendStatus';
 
 export default function Analyze() {
@@ -11,13 +12,23 @@ export default function Analyze() {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const backend = useBackendState();
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [model, setModel] = useState<ModelId>('kaggle');
+
+  // Offer the US population model only when the server has it
+  useEffect(() => {
+    if (backend !== 'online') return;
+    getModels()
+      .then((res) => setModels(res.models))
+      .catch(() => setModels([]));
+  }, [backend]);
   const waking = backend !== 'online';
 
   const handleFormSubmit = async (data: PatientInput) => {
     setLoading(true);
     setError(null);
     try {
-      await runAssessment(data);
+      await runAssessment(data, model);
       navigate('/results');
     } catch (err: any) {
       setError(err.message || 'Failed to communicate with FastAPI server. Ensure backend is running.');
@@ -48,7 +59,14 @@ export default function Analyze() {
           </div>
         )}
 
-        <PatientForm onSubmit={handleFormSubmit} loading={loading} waking={waking} />
+        <PatientForm
+          onSubmit={handleFormSubmit}
+          loading={loading}
+          waking={waking}
+          models={models}
+          model={model}
+          onModelChange={setModel}
+        />
       </div>
     </div>
   );

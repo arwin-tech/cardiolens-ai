@@ -1,5 +1,5 @@
 import { ChangeEvent, FormEvent, ReactNode, useState } from 'react';
-import { PatientInput } from '../types/api';
+import { ModelId, ModelInfo, PatientInput } from '../types/api';
 import { FramedPanel, OrnateButton } from './ornaments';
 import { EXAMPLES } from '../lib/examples';
 
@@ -8,6 +8,35 @@ interface Props {
   onSubmit: (data: PatientInput) => void;
   loading: boolean;
   waking?: boolean;
+  models?: ModelInfo[];
+  model?: ModelId;
+  onModelChange?: (model: ModelId) => void;
+}
+
+function ModelPicker({ models, model, onChange }: { models: ModelInfo[]; model: ModelId; onChange: (m: ModelId) => void }) {
+  const current = models.find((m) => m.id === model);
+  return (
+    <div className="mb-8">
+      <span className="field-label" id="model-picker-label">
+        Model
+      </span>
+      <div className="segmented" role="radiogroup" aria-labelledby="model-picker-label">
+        {models.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            role="radio"
+            aria-checked={m.id === model}
+            className="segmented__option"
+            onClick={() => onChange(m.id)}
+          >
+            {m.name}
+          </button>
+        ))}
+      </div>
+      {current?.description && <p className="mt-2 text-[0.95rem] text-stone">{current.description}</p>}
+    </div>
+  );
 }
 
 function Field({ id, label, hint, wide, children }: { id: string; label: string; hint?: string; wide?: boolean; children: ReactNode }) {
@@ -21,7 +50,7 @@ function Field({ id, label, hint, wide, children }: { id: string; label: string;
   );
 }
 
-export default function PatientForm({ onSubmit, loading, waking = false }: Props) {
+export default function PatientForm({ onSubmit, loading, waking = false, models = [], model = 'kaggle', onModelChange }: Props) {
   const [formData, setFormData] = useState<PatientInput>({
     age: 52,
     gender: 1,
@@ -34,6 +63,8 @@ export default function PatientForm({ onSubmit, loading, waking = false }: Props
     smoke: 0,
     alco: 0,
     active: 1,
+    bp_meds: 0,
+    lipid_meds: 0,
   });
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -95,6 +126,8 @@ export default function PatientForm({ onSubmit, loading, waking = false }: Props
         </h2>
         <div className="rule" />
 
+        {models.length > 1 && onModelChange && <ModelPicker models={models} model={model} onChange={onModelChange} />}
+
         <div className="mb-8 flex flex-wrap items-center gap-2.5">
           <span className="mr-1 text-stone">Try an example:</span>
           {EXAMPLES.map((ex) => (
@@ -104,9 +137,9 @@ export default function PatientForm({ onSubmit, loading, waking = false }: Props
               className="chip"
               disabled={loading}
               onClick={() => {
-                setFormData(ex.data);
+                setFormData({ ...ex.data, bp_meds: 0, lipid_meds: 0 });
                 setFormError(null);
-                onSubmit(ex.data);
+                onSubmit({ ...ex.data, bp_meds: 0, lipid_meds: 0 });
               }}
             >
               <span className="chip__dot" style={{ background: ex.color }} aria-hidden="true" />
@@ -129,6 +162,12 @@ export default function PatientForm({ onSubmit, loading, waking = false }: Props
           <Field id="f-active" label="Physical activity" wide>
             {select('active', [[1, 'Active lifestyle'], [0, 'Sedentary lifestyle']])}
           </Field>
+          {model === 'nhanes' && (
+            <>
+              <Field id="f-bp_meds" label="Taking blood-pressure medication">{select('bp_meds', yesNo)}</Field>
+              <Field id="f-lipid_meds" label="Taking cholesterol medication">{select('lipid_meds', yesNo)}</Field>
+            </>
+          )}
         </div>
 
         {formError && (

@@ -5,7 +5,17 @@
  * credentials (the API is stateless), and server errors, including FastAPI's
  * field-by-field validation errors, become readable messages.
  */
-import { BatchResponse, ExplainabilityResponse, PatientInput, PredictionResponse, WhatIfResponse } from '../types/api';
+import {
+  BatchResponse,
+  CounterfactualResponse,
+  ExplainabilityResponse,
+  ModelId,
+  ModelInfo,
+  MonitoringSummary,
+  PatientInput,
+  PredictionResponse,
+  WhatIfResponse,
+} from '../types/api';
 
 const API_BASE_URL: string = import.meta.env.VITE_API_URL || 'https://cardiolens-ai-za8w.onrender.com';
 
@@ -90,26 +100,44 @@ function postJson<T>(path: string, body: unknown, fallback: string): Promise<T> 
   );
 }
 
-export function predictRisk(patient: PatientInput): Promise<PredictionResponse> {
-  return postJson('/api/predict', patient, 'Prediction failed');
+const withModel = (path: string, model: ModelId) => `${path}?model=${encodeURIComponent(model)}`;
+
+export function predictRisk(patient: PatientInput, model: ModelId = 'kaggle'): Promise<PredictionResponse> {
+  return postJson(withModel('/api/predict', model), patient, 'Prediction failed');
 }
 
-export function explainPrediction(patient: PatientInput): Promise<ExplainabilityResponse> {
-  return postJson('/api/explain', patient, 'Explanation failed');
+export function explainPrediction(patient: PatientInput, model: ModelId = 'kaggle'): Promise<ExplainabilityResponse> {
+  return postJson(withModel('/api/explain', model), patient, 'Explanation failed');
 }
 
-export function whatIfAnalysis(original: PatientInput, modified: PatientInput): Promise<WhatIfResponse> {
-  return postJson('/api/what-if', { original, modified }, 'What-if analysis failed');
+export function whatIfAnalysis(
+  original: PatientInput,
+  modified: PatientInput,
+  model: ModelId = 'kaggle',
+): Promise<WhatIfResponse> {
+  return postJson(withModel('/api/what-if', model), { original, modified }, 'What-if analysis failed');
 }
 
-export async function batchPredict(csvFile: File): Promise<BatchResponse> {
+export function getCounterfactuals(patient: PatientInput, model: ModelId = 'kaggle'): Promise<CounterfactualResponse> {
+  return postJson(withModel('/api/counterfactuals', model), patient, 'Could not load suggestions');
+}
+
+export function getModels(): Promise<{ default: ModelId; models: ModelInfo[] }> {
+  return send('/api/models', { headers: { Accept: 'application/json' } }, 'Could not load models');
+}
+
+export function getMonitoring(days = 30): Promise<MonitoringSummary> {
+  return send(`/api/monitoring?days=${days}`, { headers: { Accept: 'application/json' } }, 'Could not load monitoring');
+}
+
+export async function batchPredict(csvFile: File, model: ModelId = 'kaggle'): Promise<BatchResponse> {
   if (!csvFile.name.toLowerCase().endsWith('.csv')) {
     throw new Error('Please choose a CSV file.');
   }
   const formData = new FormData();
   formData.append('file', csvFile);
   // No Content-Type header: the browser sets the multipart boundary itself
-  return send('/api/batch-predict', { method: 'POST', body: formData }, 'Batch scoring failed');
+  return send(withModel('/api/batch-predict', model), { method: 'POST', body: formData }, 'Batch scoring failed');
 }
 
 // Older name kept for existing imports

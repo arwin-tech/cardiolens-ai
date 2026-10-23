@@ -17,9 +17,13 @@ The backend runs on Render's free tier, which sleeps when idle, so the first req
 
 - **Risk prediction:** enter patient details to get a risk percentage, a risk level (Low, Moderate, Elevated or High) and BMI
 - **Factor breakdown:** exact SHAP values for each patient (TreeSHAP, computed by XGBoost), showing which factors pushed their risk up or down
+- **Calibrated range:** every prediction also shows how often held-out patients with similar scores actually had heart disease (Venn–Abers, a conformal prediction method)
+- **Suggested changes:** the smallest sets of healthier changes (one, two or three) that lower the predicted risk, never touching age, sex, height or medication
+- **Two models:** the original clinic model and a US population model trained on CDC survey data, with medication as an input
 - **What-if simulator:** change the blood pressure and see how the risk changes
 - **Report download:** save a plain-text summary of the assessment
 - **Batch scoring:** upload a CSV of up to 5,000 patients and get a risk score for each. Every row is checked with the same rules as the form, and rows that fail are skipped with the reason
+- **Live monitoring:** a dashboard of usage, response times, risk mix and input drift that stores only aggregate counts, never patient data
 
 ## How It Works
 
@@ -70,6 +74,26 @@ To see whether the model works outside its training data, it was tested, unchang
 
 The model does not transfer well to this population: ranking people by age alone works better. Its percentages are far too high because half the training patients had heart disease; refitting the scale on local data fixes that, but not the ranking. The main reason is blood pressure, the model's strongest input. On its own it separates sick from healthy far better in the training data (ROC-AUC 0.75) than in NHANES (0.55), partly because 66% of NHANES participants with heart disease take blood-pressure or cholesterol medication, which lowers those readings. Even among people not on medication the model doesn't beat age alone, so differences in population and in how heart disease is defined matter too. The model should not be used outside populations like its training data without retraining. To reproduce: `python src/external_validation.py` (downloads the NHANES files from CDC, about 15 MB).
 
+## Uncertainty Ranges
+
+Each prediction comes with a calibrated range from inductive Venn–Abers predictors, part of the conformal prediction family. For a score, isotonic regression is fitted on held-out calibration patients twice (once as if the patient had the disease, once as if not), and the two results bracket the calibrated probability. In plain terms: how often patients with similar scores actually had heart disease.
+
+The ranges were calibrated on 7,000 of the held-out test patients and checked on the other 7,000. They are usually narrow (median width 0.3 percentage points, 90% within 1.3) but widen to 13.71 points for unusual scores, which is the point: they show when the model has seen few similar patients. The model was already well calibrated (calibration error 1.8%, essentially unchanged at 1.8% with Venn–Abers), and the ranges make its slight overconfidence at the top end visible: a 91.3% score corresponds to an observed rate of about 86%. Reproduce with `python src/build_model_artifacts.py`.
+
+## Suggested Changes (Counterfactuals)
+
+For each patient, the API tries every combination of realistic, healthier changes to what a person can change (blood pressure in 10 mmHg steps down to 110, weight loss of 5 or 10 kg without going below a BMI of 22, quitting smoking or regular drinking, becoming active, lower cholesterol and glucose levels), scores them all in one batch, and returns the best plan using one, two and three changes. Age, sex, height and medication never change. This exposes a quirk of the clinic model: smokers in the Kaggle data have slightly lower recorded disease rates, so it rarely credits quitting. The suggestions describe the model's behaviour, not proven medical effects.
+
+## US Population Model
+
+<!-- nhanes-model:start -->
+Not trained yet. Run `python src/train_nhanes_model.py` to download five NHANES surveys from CDC, train on 2009–2016 and test on 2017–2020; this section then fills in automatically.
+<!-- nhanes-model:end -->
+
+## Monitoring Without Patient Data
+
+The `/monitoring` page shows predictions per day, response times, the risk mix and input drift (population stability index against each model's training data). Only daily counts in coarse buckets are stored, never inputs, exact values, times or IP addresses. Any count under 5 is hidden and drift waits for 30 predictions, so a quiet day can't reveal one person's inputs. Counts live in memory by default; set `DATABASE_URL` to a Postgres connection string (for example a free Supabase or Neon database) to keep them across restarts.
+
 ## SQL Data Layer
 
 The `sql/` folder rebuilds the data preparation in SQL with DuckDB: a data-quality profile (it flags 1,321 physiologically impossible blood-pressure readings), cleaning and feature engineering, and disease rates by age band and blood-pressure category. The deployed model is unchanged. To run it: `pip install duckdb`, then `python train_from_sql.py`.
@@ -77,9 +101,9 @@ The `sql/` folder rebuilds the data preparation in SQL with DuckDB: a data-quali
 ## Tech Stack
 
 - **ML:** Python, XGBoost, scikit-learn, SHAP, SQL (DuckDB)
-- **Backend:** FastAPI, hosted on Render
+- **Backend:** FastAPI, SQLAlchemy (optional Postgres for monitoring), hosted on Render
 - **Frontend:** React, TypeScript, Vite, Tailwind CSS, Recharts, hosted on Vercel
-- **Engineering:** pytest (25 API tests), GitHub Actions CI on every push, Docker image for the API
+- **Engineering:** pytest (35 API tests), GitHub Actions CI on every push, Docker image for the API
 
 ## Run Locally
 
